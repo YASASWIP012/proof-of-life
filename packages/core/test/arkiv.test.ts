@@ -44,7 +44,7 @@ describe("assembleVault trust rules", () => {
     release: { mode: "public" }, sealed_at_ms: 0, tag: "test",
   };
   let n = 0;
-  const row = (type: string, creator: string, extra: Record<string, unknown> = {}, payload: unknown = null, owner = SEAL_ADDRESS, expiresAt = 1000n) => ({
+  const row = (type: string, creator: string, extra: Record<string, unknown> = {}, payload: unknown = null, owner: string = SEAL_ADDRESS, expiresAt = 1000n) => ({
     key: `0x${(++n).toString(16).padStart(64, "0")}` as `0x${string}`,
     owner: owner as `0x${string}`,
     creator: creator as `0x${string}`,

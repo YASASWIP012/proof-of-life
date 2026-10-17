@@ -36,11 +36,12 @@ export type VaultView = {
   creator: Hex;
   manifest: Manifest;
   head: bigint;
+  createdAt: bigint;
   expiresAt: bigint;
   /** Readonly, and owned by an address nobody holds: neither the activist nor anyone else can delete it. */
   sealed: boolean;
   heartbeat: { key: Hex; expiresAt: bigint; owner: Hex; createdAt: bigint } | null;
-  envelopes: { key: Hex; slot: number; custodian: Hex; expiresAt: bigint; sealed: boolean }[];
+  envelopes: { key: Hex; slot: number; custodian: Hex; expiresAt: bigint; sealed: boolean; payload: Uint8Array }[];
   acks: { key: Hex; slot: number; custodian: Hex; expiresAt: bigint }[];
   releases: ReleaseView[];
   status: Status;
@@ -100,7 +101,7 @@ export function assembleVault(rows: Row[], vaultId: Hex, creator: Hex, head: big
   const envelopes = byType("envelope").flatMap((r) => {
     if (!same(r.creator, creator)) return reject(r, "envelope not written by the vault's creator"), [];
     const slot = num(r, "slot");
-    return [{ key: r.key, slot, custodian: getAddress(String(r.attributes.custodian?.value)), expiresAt: r.expiresAt, sealed: isSealed(r) }];
+    return [{ key: r.key, slot, custodian: getAddress(String(r.attributes.custodian?.value)), expiresAt: r.expiresAt, sealed: isSealed(r), payload: r.payload }];
   });
 
   const acks = byType("ack").flatMap((r) => {
@@ -152,6 +153,7 @@ export function assembleVault(rows: Row[], vaultId: Hex, creator: Hex, head: big
     creator: getAddress(creator),
     manifest,
     head,
+    createdAt: v.createdAt,
     expiresAt: v.expiresAt,
     sealed: isSealed(v),
     heartbeat: hb ? { key: hb.key, expiresAt: hb.expiresAt, owner: hb.owner, createdAt: hb.createdAt } : null,
@@ -230,4 +232,15 @@ export async function envelopesFor(client: PublicClient, custodian: Hex) {
     .limit(200)
     .fetch();
   return (page.entities as unknown as Row[]).map((r) => ({ key: r.key, vaultId: text(r, "vault_id") as Hex, creator: getAddress(r.creator), slot: num(r, "slot"), createdAt: r.createdAt }));
+}
+
+/** The exact query strings a reader can paste anywhere to check a vault without this app. */
+export function verificationQueries(vaultId: Hex, creator: Hex) {
+  const base = `project = str('${PROJECT}') AND vault_id = bytes32(${vaultId})`;
+  return {
+    everything: `${base} AND NOT (type = str('chunk'))`,
+    heartbeat: `${base} AND type = str('heartbeat') AND $creator = addr(${creator})`,
+    releases: `${base} AND type = str('release')`,
+    chunks: `${base} AND type = str('chunk') AND $creator = addr(${creator})`,
+  };
 }
