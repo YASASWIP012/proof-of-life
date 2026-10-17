@@ -67,7 +67,7 @@ function Seat({ account, openKey }: { account: OpenKey["account"]; openKey: Open
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
       <Card>
         <h2 className="font-serif text-lg font-bold">Invite code · {openKey.label}</h2>
         <p className="mt-1 text-sm text-muted">Send this to the activist through a channel you both trust. It holds only this key's public half.</p>

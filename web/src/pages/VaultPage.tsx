@@ -11,6 +11,8 @@ import { read } from "../lib/net";
 import { sessionWallet } from "../lib/session";
 import { TIRAMISU } from "@proof-of-life/core";
 
+const DARK_PHASE = { alive: "#4ADE80", overdue: "#FBBF24", lapsed: "#F87171", releasing: "#F87171", released: "#A5B4FC" } as const;
+
 export default function VaultPage() {
   const { vaultId, creator } = useParams() as { vaultId: Hex; creator: Hex };
   const { view, error, refresh, fetchedAt, events } = useVault(vaultId, creator);
@@ -42,41 +44,47 @@ function VaultBody({ view, fetchedAt, events, refresh }: { view: VaultView; fetc
   const phase = status.phase;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
       <div className="space-y-6">
-        <Card>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted">Vault · {m.tag || short(view.vaultId)}</p>
-              <h1 className="mt-1 font-serif text-2xl font-bold">{t(`phase_${phase}`)}</h1>
-              <p className="mt-1 max-w-md text-sm text-muted">
-                {t(`phase_${phase}_d`, { have: valid.length, k: m.k, need: status.releasesNeeded })}
-              </p>
-            </div>
-            <PhaseBadge phase={phase} />
-          </div>
-          <div className="mt-6 flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-8">
-            <Pulse phase={phase} fraction={fraction} />
-            <dl className="grid w-full gap-3 text-sm">
-              {hb && dueAt !== null && hb.expiresAt > live && (
-                <>
-                  <div>
-                    <dt className="text-muted">{t("t_due_in")}</dt>
-                    <dd className="font-mono text-2xl font-semibold">{dueAt > live ? duration(blocksToSeconds(dueAt - live)) : "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">{t("t_lapses_in")}</dt>
-                    <dd className="font-mono text-lg">{duration(blocksToSeconds(hb.expiresAt - live))}</dd>
-                  </div>
-                </>
-              )}
-              <div className="text-xs text-muted">
-                Every {duration(m.interval_s)} · grace {duration(m.grace_s)} · {m.k} of {m.n} custodians · {m.release.mode === "newsroom" ? "release to newsroom" : "public release"}
+        <div className="stage !p-4 sm:!p-8">
+          <div className="window window--dark">
+            <div className="window__bar"><span className="lights"><i /><i /><i /></span><span className="window__title">Vault · {m.tag || short(view.vaultId)}</span></div>
+            <div className="p-6 sm:p-8" style={{ background: "var(--app-bg)", color: "var(--app-ink)" }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h1 className="text-[30px] font-bold tracking-[-0.03em]">{t(`phase_${phase}`)}</h1>
+                  <p className="mt-1 max-w-md text-[14.5px]" style={{ color: "var(--app-ink-2)" }}>
+                    {t(`phase_${phase}_d`, { have: valid.length, k: m.k, need: status.releasesNeeded })}
+                  </p>
+                </div>
+                <span className="inline-flex h-8 items-center gap-2 rounded-full px-3 text-[12.5px] font-semibold" style={{ background: "rgba(255,255,255,.07)", color: DARK_PHASE[phase] }}>
+                  <span className={`h-2 w-2 rounded-full ${phase === "alive" ? "beat" : ""}`} style={{ background: "currentColor" }} />{t(`phase_${phase}`)}
+                </span>
               </div>
-            </dl>
+              <div className="mt-6 flex flex-col items-center gap-6 sm:flex-row sm:gap-8">
+                <Pulse phase={phase} fraction={fraction} size={190} />
+                <div className="grid w-full gap-3">
+                  {hb && dueAt !== null && hb.expiresAt > live && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-[12px] px-4 py-3" style={{ background: "var(--app-card)" }}>
+                        <p className="text-[12px]" style={{ color: "var(--app-ink-2)" }}>{t("t_due_in")}</p>
+                        <p className="t-mono ticker mt-1 text-[22px]">{dueAt > live ? duration(blocksToSeconds(dueAt - live)) : "—"}</p>
+                      </div>
+                      <div className="rounded-[12px] px-4 py-3" style={{ background: "var(--app-card)" }}>
+                        <p className="text-[12px]" style={{ color: "var(--app-ink-2)" }}>{t("t_lapses_in")}</p>
+                        <p className="t-mono ticker mt-1 text-[22px]">{duration(blocksToSeconds(hb.expiresAt - live))}</p>
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[12.5px]" style={{ color: "var(--app-ink-2)" }}>
+                    Every {duration(m.interval_s)} · grace {duration(m.grace_s)} · {m.k} of {m.n} custodians · {m.release.mode === "newsroom" ? "release to a newsroom" : "public release"}
+                  </p>
+                </div>
+              </div>
+              {status.earlyRelease && <div className="mt-4"><Notice tone="danger">{t("early_release")}</Notice></div>}
+            </div>
           </div>
-          {view.status.earlyRelease && <div className="mt-4"><Notice tone="danger">{t("early_release")}</Notice></div>}
-        </Card>
+        </div>
 
         <Card>
           <h2 className="font-serif text-lg font-bold">{t("v_custodians")}</h2>

@@ -105,7 +105,7 @@ function Form({ account }: { account: OpenKey["account"] }) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
       <div className="space-y-6">
         <Card>
           <h2 className="font-serif text-lg font-bold">1 · Documents</h2>

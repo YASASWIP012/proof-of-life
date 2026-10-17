@@ -188,7 +188,7 @@ export default function Drill() {
   const livePhase = view ? vaultStatus({ head: live, heartbeatExpiresAt: hb?.expiresAt ?? null, graceS: GRACE, k: view.manifest.k, validReleases: view.releases.filter((r) => r.valid).length }).phase : "alive";
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="space-y-6">
         <Card>
           <p className="text-xs uppercase tracking-wider text-muted">Five-minute drill</p>
