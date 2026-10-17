@@ -1,0 +1,13 @@
+{
+  "always-alive": {
+    "vaultId": "0x87935a7665533da43c4b562fa4a39951c6fe2a4d3a82a19b24c2aef7bca31dc9",
+    "creator": "0x8C8adBA31c57C51b4cBAdA5c503826378260e01e",
+    "activist": 101,
+    "custodians": [
+      210,
+      211,
+      212
+    ],
+    "checkIn": true
+  }
+}

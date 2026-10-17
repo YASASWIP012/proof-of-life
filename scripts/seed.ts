@@ -34,8 +34,8 @@ async function seedVault(name: string, slot: number, doc: keyof typeof DEMO_DOCS
   const custodianIdx = [0, 1, 2].map((i) => INDEX.demoCustodian + slot * 10 + i);
   const activist = account(activistIdx);
   const custodians = custodianIdx.map(account);
-  await fund([activist.address], "0.4");
-  await fund(custodians.map((c) => c.address), "0.05");
+  await fund([activist.address], "0.12");
+  await fund(custodians.map((c) => c.address), "0.03");
   const d = DEMO_DOCS[doc];
   const sealed = sealVault({ title: d.title, note: d.note, files: d.files, k: 2, custodianPubKeys: custodians.map((c) => pub(c.secret)) });
   const res = await createVault(walletClient(activist, { rpc }), reader, {

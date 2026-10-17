@@ -7,3 +7,4 @@ dist
 *.log
 .vercel
 !cli/dist
+.env*
