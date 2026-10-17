@@ -9,3 +9,4 @@ dist
 !cli/dist
 .env*
 submission/
+video/out/
