@@ -2,16 +2,16 @@
 import { ackCustody, envelopesFor, loadVault, releaseMyShare, walletClient, type VaultView } from "@proof-of-life/core";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { KeyGate, useKeys, type Unlocked } from "../components/KeyGate";
+import { KeyGate, useBlobCount } from "../components/KeyGate";
 import { Button, Card, Copy, Notice, PhaseBadge, TxLink } from "../components/ui";
 import { blocksToSeconds, duration, short, vaultPath } from "../lib/format";
-import { inviteCode, type StoredKey } from "../lib/keys";
+import { inviteCode, type OpenKey } from "../lib/keys";
 import { read, readClient } from "../lib/net";
 import { ensureGas } from "../lib/tap";
 
 export default function Custodian() {
-  const keys = useKeys("custodian");
-  const [acct, setAcct] = useState<{ a: Unlocked; k: StoredKey } | null>(null);
+  const stored = useBlobCount();
+  const [keys, setKeys] = useState<OpenKey[] | null>(null);
   return (
     <div className="space-y-6">
       <div>
@@ -20,22 +20,25 @@ export default function Custodian() {
           You hold one piece of a key. Alone it reveals nothing. You promise two things: to try to reach the activist if their heartbeat is overdue, and to publish your piece if it stops. Use a new key for every vault, so nothing on Arkiv connects your vaults to each other or to you.
         </p>
       </div>
-      {!acct ? (
+      {!keys ? (
         <div className="mx-auto max-w-xl">
-          <KeyGate role="custodian" title={keys.length ? "Unlock a custodian key, or make one for a new vault" : "Make a custodian key for one vault"} onReady={(a, k) => setAcct({ a, k })} />
+          <KeyGate role="custodian" title={stored ? "Unlock your custodian keys, or make one for a new vault" : "Make a custodian key for one vault"} onReady={setKeys} />
         </div>
       ) : (
-        <Seat account={acct.a} stored={acct.k} />
+        <div className="space-y-10">
+          {keys.map((k) => <Seat key={k.account.address} account={k.account} openKey={k} />)}
+          <Button variant="ghost" onClick={() => setKeys(null)}>Make another custodian key</Button>
+        </div>
       )}
     </div>
   );
 }
 
-function Seat({ account, stored }: { account: Unlocked; stored: StoredKey }) {
+function Seat({ account, openKey }: { account: OpenKey["account"]; openKey: OpenKey }) {
   const [vaults, setVaults] = useState<VaultView[] | null>(null);
   const [msg, setMsg] = useState<{ text: string; tx?: string; bad?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
-  const code = inviteCode(stored);
+  const code = inviteCode(openKey);
 
   const load = async () => {
     const env = await read((c) => envelopesFor(c, account.address));
@@ -66,7 +69,7 @@ function Seat({ account, stored }: { account: Unlocked; stored: StoredKey }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
       <Card>
-        <h2 className="font-serif text-lg font-bold">Your invite code</h2>
+        <h2 className="font-serif text-lg font-bold">Invite code · {openKey.label}</h2>
         <p className="mt-1 text-sm text-muted">Send this to the activist through a channel you both trust. It holds only this key's public half.</p>
         <pre className="mono-wrap mt-3 whitespace-pre-wrap rounded-lg bg-paper p-3 text-xs">{code}</pre>
         <div className="mt-2"><Copy text={code} /></div>

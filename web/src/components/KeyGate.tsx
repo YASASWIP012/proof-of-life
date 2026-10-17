@@ -1,54 +1,56 @@
-// Pick, unlock, create or restore a key for one role. Keys never leave this browser except as the
-// passphrase-wrapped backup file the person downloads.
+// Unlock, create or restore keys. Nothing about a key is readable in this browser until its passphrase opens it.
 import { useEffect, useState } from "react";
-import type { PrivateKeyAccount } from "viem/accounts";
-import { backupBlob, createKey, getUnlocked, importBackup, loadKeys, unlock, type Role, type StoredKey } from "../lib/keys";
+import type { SealedBlob } from "@proof-of-life/core";
+import { backupFile, createKey, importBackup, loadBlobs, unlockAll, type OpenKey, type Role } from "../lib/keys";
 import { short } from "../lib/format";
 import { Button, Card, Field, Notice, inputCls } from "./ui";
 
-export type Unlocked = PrivateKeyAccount & { secret: Uint8Array };
-
-export function useKeys(role: Role) {
-  const [keys, setKeys] = useState(() => loadKeys().filter((k) => k.role === role));
+export function useBlobCount() {
+  const [n, setN] = useState(() => loadBlobs().length);
   useEffect(() => {
-    const on = () => setKeys(loadKeys().filter((k) => k.role === role));
+    const on = () => setN(loadBlobs().length);
     window.addEventListener("pol-keys", on);
     return () => window.removeEventListener("pol-keys", on);
-  }, [role]);
-  return keys;
+  }, []);
+  return n;
 }
 
-export function downloadBackup(k: StoredKey) {
+export function downloadBackup(blobs: SealedBlob[], name = "proof-of-life-keys") {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(backupBlob(k));
-  a.download = `proof-of-life-${k.role}-${k.address.slice(2, 8)}.json`;
+  a.href = URL.createObjectURL(backupFile(blobs));
+  a.download = `${name}-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
 }
 
-export function KeyGate({ role, onReady, title, forceNew = false, intro }: { role: Role; onReady: (a: Unlocked, k: StoredKey) => void; title: string; forceNew?: boolean; intro?: string }) {
-  const keys = useKeys(role);
-  const [mode, setMode] = useState<"pick" | "new">(keys.length && !forceNew ? "pick" : "new");
-  const [sel, setSel] = useState(keys[0]?.address ?? "");
+type Props = {
+  role: Role;
+  title: string;
+  intro?: string;
+  /** Skip "unlock": every vault gets a key that has never written anything else. */
+  forceNew?: boolean;
+  /** Offer a duress passphrase while creating. Activists only. */
+  offerDuress?: boolean;
+  onReady: (keys: OpenKey[]) => void;
+};
+
+export function KeyGate({ role, title, intro, forceNew = false, offerDuress = false, onReady }: Props) {
+  const stored = useBlobCount();
+  const [mode, setMode] = useState<"unlock" | "new">(stored && !forceNew ? "unlock" : "new");
   const [pass, setPass] = useState("");
   const [pass2, setPass2] = useState("");
-  const [label, setLabel] = useState(role === "activist" ? "my phone" : "");
+  const [duress, setDuress] = useState("");
+  const [label, setLabel] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [fresh, setFresh] = useState<StoredKey | null>(null);
+  const [fresh, setFresh] = useState<{ key: OpenKey; blobs: SealedBlob[] } | null>(null);
 
   const doUnlock = async () => {
-    const k = keys.find((x) => x.address === sel);
-    if (!k) return;
     setBusy(true);
     setErr(null);
-    try {
-      const a = getUnlocked(k.address) ?? (await unlock(k, pass));
-      onReady(a, k);
-    } catch {
-      setErr("That passphrase does not open this key.");
-    } finally {
-      setBusy(false);
-    }
+    const keys = (await unlockAll(pass)).filter((k) => k.role === role);
+    setBusy(false);
+    if (keys.length === 0) return setErr(`That passphrase opens no ${role} key in this browser.`);
+    onReady(keys);
   };
 
   const doCreate = async () => {
@@ -57,9 +59,9 @@ export function KeyGate({ role, onReady, title, forceNew = false, intro }: { rol
     setBusy(true);
     setErr(null);
     try {
-      const k = await createKey(role, pass, label || role);
-      downloadBackup(k);
-      setFresh(k);
+      const made = await createKey(role, pass, label.trim() || role, duress || undefined);
+      downloadBackup(made.blobs, `proof-of-life-${role}`);
+      setFresh(made);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -67,26 +69,17 @@ export function KeyGate({ role, onReady, title, forceNew = false, intro }: { rol
     }
   };
 
-  const doImport = async (f: File) => {
-    try {
-      const k = importBackup(await f.text());
-      setSel(k.address);
-      setMode("pick");
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  };
-
   if (fresh) {
     return (
       <Card>
         <h2 className="font-serif text-lg font-bold">Your key is ready</h2>
-        <p className="mt-2 text-sm">A backup file just downloaded. Keep it somewhere safe and separate from this phone, for example with a person you trust. It is useless without your passphrase.</p>
-        <Notice tone="warn">If you lose both this browser and the backup, you cannot check in, and your vault will be released when the deadline passes. That is the design.</Notice>
-        <div className="mt-4 flex gap-2">
-          <Button onClick={() => onReady(getUnlocked(fresh.address)!, fresh)}>Continue</Button>
-          <Button variant="ghost" onClick={() => downloadBackup(fresh)}>Download backup again</Button>
+        <p className="mt-2 text-sm">A backup file just downloaded. Keep it away from this phone, for example with someone you trust. Without your passphrase it is a few lines of random text.</p>
+        <div className="mt-3"><Notice tone="warn">If you lose both this browser and the backup, you cannot check in, and the vault will be released when the deadline passes. That is how it is meant to work.</Notice></div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button onClick={() => onReady([fresh.key])}>Continue</Button>
+          <Button variant="ghost" onClick={() => downloadBackup(fresh.blobs, `proof-of-life-${role}`)}>Download the backup again</Button>
         </div>
+        <p className="mt-3 font-mono text-xs text-muted">Key address {short(fresh.key.account.address)}</p>
       </Card>
     );
   }
@@ -95,39 +88,53 @@ export function KeyGate({ role, onReady, title, forceNew = false, intro }: { rol
     <Card>
       <h2 className="font-serif text-lg font-bold">{title}</h2>
       {intro && <p className="mt-1 text-sm text-muted">{intro}</p>}
-      {!forceNew && <div className="mt-3 flex gap-2 text-sm">
-        {keys.length > 0 && <button className={`rounded-lg px-3 py-1.5 ${mode === "pick" ? "bg-line/60 font-semibold" : ""}`} onClick={() => setMode("pick")}>Use a saved key</button>}
-        <button className={`rounded-lg px-3 py-1.5 ${mode === "new" ? "bg-line/60 font-semibold" : ""}`} onClick={() => setMode("new")}>Make a new key</button>
-        <label className="cursor-pointer rounded-lg px-3 py-1.5 text-muted hover:text-ink">
-          Restore a backup
-          <input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && doImport(e.target.files[0])} />
-        </label>
-      </div>}
+      {!forceNew && (
+        <div className="mt-3 flex flex-wrap gap-2 text-sm">
+          {stored > 0 && <button className={`rounded-lg px-3 py-1.5 ${mode === "unlock" ? "bg-line/60 font-semibold" : ""}`} onClick={() => setMode("unlock")}>Unlock</button>}
+          <button className={`rounded-lg px-3 py-1.5 ${mode === "new" ? "bg-line/60 font-semibold" : ""}`} onClick={() => setMode("new")}>Make a new key</button>
+          <label className="cursor-pointer rounded-lg px-3 py-1.5 text-muted hover:text-ink">
+            Restore a backup
+            <input type="file" accept="application/json" className="hidden" onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              try {
+                const n = importBackup(await f.text());
+                setErr(null);
+                setMode("unlock");
+                setLabel(`${n} key${n === 1 ? "" : "s"} restored. Enter the passphrase.`);
+              } catch (x) {
+                setErr((x as Error).message);
+              }
+            }} />
+          </label>
+        </div>
+      )}
       <div className="mt-4 space-y-3">
-        {mode === "pick" ? (
+        {mode === "unlock" ? (
           <>
-            <Field label="Key">
-              <select className={inputCls} value={sel} onChange={(e) => setSel(e.target.value)}>
-                {keys.map((k) => <option key={k.address} value={k.address}>{k.label} · {short(k.address, 4)}</option>)}
-              </select>
-            </Field>
+            {label && <p className="text-sm text-muted">{label}</p>}
             <Field label="Passphrase">
               <input type="password" className={inputCls} value={pass} onChange={(e) => setPass(e.target.value)} onKeyDown={(e) => e.key === "Enter" && doUnlock()} autoComplete="current-password" />
             </Field>
-            <Button onClick={doUnlock} disabled={busy || !sel}>{busy ? "Unlocking…" : "Unlock"}</Button>
+            <Button onClick={doUnlock} disabled={busy || !pass}>{busy ? "Unlocking…" : "Unlock"}</Button>
           </>
         ) : (
           <>
-            <Field label="Label for this key" hint="Only you see it. Never use a real name.">
+            <Field label="A label only you will see" hint="Shown after you unlock, to tell keys apart. Never a real name.">
               <input className={inputCls} value={label} maxLength={24} onChange={(e) => setLabel(e.target.value)} />
             </Field>
-            <Field label="Passphrase" hint="At least 8 characters. A sentence only you would write works well.">
+            <Field label="Passphrase" hint="At least 8 characters. A sentence only you would write works well. You can use the same one for every vault.">
               <input type="password" className={inputCls} value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="new-password" />
             </Field>
             <Field label="Passphrase again">
               <input type="password" className={inputCls} value={pass2} onChange={(e) => setPass2(e.target.value)} autoComplete="new-password" />
             </Field>
-            <Button onClick={doCreate} disabled={busy}>{busy ? "Making the key…" : "Make key and download backup"}</Button>
+            {offerDuress && (
+              <Field label="Duress passphrase (optional)" hint="If someone forces you to check in, use this one instead. The screen says you checked in. In fact the heartbeat stops at once and your custodians are free to release. Nothing stored on this phone shows that a duress passphrase exists.">
+                <input type="password" className={inputCls} value={duress} onChange={(e) => setDuress(e.target.value)} autoComplete="new-password" />
+              </Field>
+            )}
+            <Button onClick={doCreate} disabled={busy}>{busy ? "Making the key…" : "Make the key and download its backup"}</Button>
           </>
         )}
         {err && <Notice tone="danger">{err}</Notice>}

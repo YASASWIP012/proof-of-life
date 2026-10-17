@@ -3,10 +3,10 @@ import { createVault, hexToBytes, MAX_BUNDLE_BYTES, sealVault, walletClient, typ
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Hex } from "viem";
-import { KeyGate, type Unlocked } from "../components/KeyGate";
+import { KeyGate } from "../components/KeyGate";
 import { Button, Card, Copy, Field, Notice, TxLink, inputCls } from "../components/ui";
 import { duration, fmtBytes, vaultPath } from "../lib/format";
-import { attachVault, parseInvite, type StoredKey } from "../lib/keys";
+import { parseInvite, type OpenKey } from "../lib/keys";
 import { readClient } from "../lib/net";
 import { ensureGas } from "../lib/tap";
 
@@ -19,21 +19,21 @@ const RHYTHMS = [
 ] as const;
 
 export default function NewVault() {
-  const [acct, setAcct] = useState<{ a: Unlocked; k: StoredKey } | null>(null);
+  const [acct, setAcct] = useState<OpenKey | null>(null);
   if (!acct)
     return (
       <div className="mx-auto max-w-xl">
         <KeyGate
-          role="activist" forceNew title="A new key for this vault"
+          role="activist" forceNew offerDuress title="A new key for this vault"
           intro="Every vault gets its own key. On Arkiv, everything a key writes can be listed with one query, so a fresh key per vault means nobody can tell that two vaults belong to the same person. You can use the same passphrase for all of them."
-          onReady={(a, k) => setAcct({ a, k })}
+          onReady={(keys) => setAcct(keys[0])}
         />
       </div>
     );
-  return <Form account={acct.a} />;
+  return <Form account={acct.account} />;
 }
 
-function Form({ account }: { account: Unlocked }) {
+function Form({ account }: { account: OpenKey["account"] }) {
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
@@ -79,7 +79,6 @@ function Form({ account }: { account: Unlocked }) {
         sealed, k, custodians, intervalS: r.interval, graceS: r.grace, mode,
         newsroomPubkey: mode === "newsroom" ? (newsroom as Hex) : undefined, tag: tag.trim().slice(0, 24),
       }, (p) => p.txHash && setLog((l) => [...l, { text: p.stage === "chunks" ? `Chunk ${p.done}/${p.total} sealed` : "Manifest, envelopes and heartbeat sealed together", tx: p.txHash }]));
-      attachVault(account.address, { vaultId: sealed.vaultId, creator: account.address });
       setDone({ manifest: res.manifest, vaultId: sealed.vaultId });
     } catch (e) {
       setErr((e as Error).message);

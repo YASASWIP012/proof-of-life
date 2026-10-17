@@ -103,3 +103,13 @@ describe("vault", () => {
     expect(() => reassemble(swapped, v.chunkHashes, v.ciphertextHash)).toThrow();
   });
 });
+
+describe("keystore v2 blobs", () => {
+  it("hide everything until the right passphrase", async () => {
+    const { sealBlob, openBlob } = await import("../src/crypto/keystore.js");
+    const b = await sealBlob(utf8('{"role":"activist"}'), "a long passphrase");
+    expect(JSON.stringify(b)).not.toContain("activist");
+    expect(new TextDecoder().decode(await openBlob(b, "a long passphrase"))).toBe('{"role":"activist"}');
+    await expect(openBlob(b, "another passphrase")).rejects.toThrow(DecryptError);
+  }, 30_000);
+});

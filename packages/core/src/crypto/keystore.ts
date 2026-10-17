@@ -42,3 +42,23 @@ export async function unwrapKey(w: WrappedKey, passphrase: string): Promise<Uint
   const key = await kek(passphrase, fromBase64(w.salt), w.n, w.r, w.p);
   return open(key, fromBase64(w.data), utf8(w.address));
 }
+
+/**
+ * Version 2: everything about a key, including what it is for and which vaults it guards, sealed under the
+ * passphrase. A stored blob shows nothing but random bytes, so a seized phone reveals no address, role or vault.
+ */
+export type SealedBlob = { v: 2; kdf: "scrypt"; n: number; r: number; p: number; salt: string; data: string };
+
+const BLOB_AAD = utf8("proof-of-life/keystore/v2");
+
+export async function sealBlob(payload: Uint8Array, passphrase: string): Promise<SealedBlob> {
+  if (passphrase.length < 8) throw new RangeError("passphrase must be at least 8 characters");
+  const salt = randomBytes(16);
+  const key = await kek(passphrase, salt, PARAMS.N, PARAMS.r, PARAMS.p);
+  return { v: 2, kdf: "scrypt", n: PARAMS.N, r: PARAMS.r, p: PARAMS.p, salt: toBase64(salt), data: toBase64(seal(key, payload, BLOB_AAD)) };
+}
+
+export async function openBlob(b: SealedBlob, passphrase: string): Promise<Uint8Array> {
+  const key = await kek(passphrase, fromBase64(b.salt), b.n, b.r, b.p);
+  return open(key, fromBase64(b.data), BLOB_AAD);
+}

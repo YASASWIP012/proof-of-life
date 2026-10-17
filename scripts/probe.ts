@@ -64,9 +64,29 @@ if (mode === "budget") {
   let n = 0;
   const t0 = Date.now();
   try {
-    for (; n < 400; n++) await open.select({ key: true }).where([{ toString: () => "project = str('pol-probe')" } as never]).limit(1).fetch();
+    for (; n < 400; n++) await open.query("project = str('pol-probe')", { limit: 1 });
     console.log(`400 keyless queries without refusal in ${((Date.now() - t0) / 1000).toFixed(0)} s`);
   } catch (e) {
     console.log(`keyless refusal after ${n} queries (${((Date.now() - t0) / 1000).toFixed(0)} s): ${short(e)}`);
+  }
+}
+
+if (mode === "lifetime") {
+  // Does a longer lifetime cost more? Same 32 KiB payload at 1, 30 and 365 days.
+  await fund();
+  for (const days of [1, 30, 365]) {
+    const r = await wallet.createEntity({ ...create(32 * 1024), expires: ExpirationTime.fromDays(days) });
+    const rc = await reader.waitForTransactionReceipt({ hash: r.txHash });
+    console.log(`32 KiB for ${days} day(s): gas ${rc.gasUsed}, ${Number(rc.gasUsed * rc.effectiveGasPrice) / 1e18} GLM  ${r.txHash}`);
+  }
+}
+
+if (mode === "unfunded") {
+  // What does a write from a wallet with 0 GLM say?
+  const empty = walletClient(account(960_000 + (Date.now() % 1000)), { rpc });
+  try {
+    await empty.createEntity(create(16));
+  } catch (e) {
+    console.log(`unfunded write: ${short(e)}`);
   }
 }
