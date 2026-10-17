@@ -2,7 +2,7 @@
 
 **If my heartbeat stops, the truth comes out.**
 
-A dead-hand vault for India's RTI activists, whistleblowers and the journalists and lawyers who stand with them. Seal your documents, check in with one tap, and if you ever stop, the people you chose release them. Nobody can stop that release: not us, not them, not anyone who comes for you.
+A dead-hand vault for India's RTI activists, whistleblowers and the journalists and lawyers who stand with them. Seal your documents and check in with one tap. If you stop, the people you chose can open them, and the record they open cannot be deleted by you, by us, or by whoever comes for you.
 
 Built on [Arkiv](https://arkiv.network), the Web3 database, for **Arkiv: Global Tour Stop** (9 to 18 October 2026). Tracks: **Best Indian Use Case**, **Censorship Resistance**, **Privacy**.
 
@@ -30,6 +30,7 @@ Today an activist's protection is a folder on a laptop, a copy with a friend, or
 
 - **The evidence cannot be destroyed.** Files are encrypted in the activist's browser and written to Arkiv. Every encrypted piece is read-only and handed, in the same transaction, to an address nobody holds. Not the activist under duress, not us under a court order, not anyone can delete it.
 - **Silencing the activist releases the evidence.** The activist checks in on a rhythm they choose (weekly, fortnightly, monthly). If they stop, the heartbeat disappears from Arkiv at its deadline, and their custodians publish their pieces of the key. Once enough are public, anyone's browser can open the documents. Killing the activist no longer buries the findings, which removes the reason to kill.
+- **A forced check-in can still raise the alarm.** An activist can set a duress passphrase. Checking in with it looks normal on screen and stops the heartbeat at once.
 - **No single person can betray them.** The key is split among custodians (a journalist, a lawyer, a friend), and any `k` of them together can open the vault. Fewer learn nothing. One unreachable custodian does not block the release.
 - **Editors can check before anything is published.** In newsroom mode the pieces are sealed to one newsroom's key, so its editors read the documents first and decide what to publish.
 - **It works for them today.** A phone browser, no wallet to install, no crypto to buy, in English, हिन्दी and తెలుగు.
@@ -51,6 +52,10 @@ Today an activist's protection is a folder on a laptop, a copy with a friend, or
                                                              └─► any browser rebuilds the key
                                                                  and decrypts the chunks
 ```
+
+## Who has to do what
+
+Arkiv enforces three things: the deadline, the undeletable record, and who wrote each piece. The release itself needs `k` of the activist's custodians to publish their pieces. If enough custodians are silenced or refuse, the vault stays sealed, so an activist should pick people in different places and set `k` below the total. Custodians can run the [CLI watcher](cli/src/main.ts) (`watch --auto-release`) on their own machines, so a release does not wait on anyone opening a website. The demo vaults' custodians are bots run by one GitHub workflow, which is fine for a demo and not how a real vault should be set up.
 
 ## Why it has to be Arkiv
 
@@ -86,6 +91,8 @@ The product falls apart without three Arkiv properties:
 | a custodian publishes a wrong piece | ignored: it fails the slot's public commitment |
 | a custodian publishes early | the app and CLI refuse; if done anyway, the vault page shows a red **early release** warning, and fewer than `k` pieces still reveal nothing |
 | one custodian is unreachable | `k`-of-`n`: the others are enough |
+| someone forces the activist to check in | with the duress passphrase the screen says "checked in" and the heartbeat is deleted instead |
+| someone takes the activist's phone | they find opaque encrypted blobs: no address, role, label or vault list without the passphrase (vaults are found on Arkiv by key, never stored on the phone) |
 | our website disappears | the CLI, the curl recipe and any other reader built from [`schema.md`](arkiv/schema.md) still work |
 | someone watches the chain | they see random ids, ciphertext and check-in times, not names, titles or links between vaults. Check-in timing remains visible; the app says so before sealing |
 
@@ -146,6 +153,10 @@ Demo custodians are listed by derivation index in [`scripts/demo-vaults.json`](s
 ## What this is for, and what it is not
 
 For lawfully obtained records: RTI replies, public records and your own evidence. Not for classified material, other people's personal data, or anything you could not lawfully hold. For real use, choose newsroom release so editors check documents before anything is published.
+
+## Team
+
+Yasaswi Paruchuri (Indian national), KL University. Solo build.
 
 ## Built during the challenge
 

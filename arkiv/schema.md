@@ -106,12 +106,23 @@ Pages and the CLI watcher subscribe with `watchEntityEvents` over a **WebSocket*
 | Release | create `release` and hand it to `0x…dEaD` in the same batch |
 | Keep alive | extend sealed entities (anyone) |
 
+## What different people can see
+
+| Who | What they see | What they do not see |
+|---|---|---|
+| Anyone reading Arkiv | random `vault_id`s, ciphertext sizes, `k` and `n`, rhythm, the heartbeat deadline, check-in times, one-time custodian addresses, which slots released | names, titles, file names, document contents, which vaults belong to the same person (each vault is sealed by a fresh activist key) |
+| The gas tap (our Vercel function) | the fresh address it funds and the request's IP address | keys, documents, vault ids. It keeps no log of its own; the hosting platform's request logs still exist |
+| Someone holding the activist's phone | a list of passphrase-sealed blobs | addresses, roles, labels and vaults. Vaults are not stored on the phone; the app finds them on Arkiv after unlocking |
+| Someone forcing a check-in | a normal "checked in" screen | that a duress passphrase was used: its blob looks like any other, and it deletes the heartbeat instead of extending it |
+
+Check-in timing stays visible to anyone watching the chain. The app says so before sealing and suggests checking in at times the activist would be online anyway.
+
 ## What stays off Arkiv, on purpose
 
 | Kept off | Why |
 |---|---|
 | Plaintext documents, titles, notes, file names | Everything on Arkiv is public. Only ciphertext goes up |
-| Private keys and passphrases | Keys live in the browser, wrapped with scrypt + AES-GCM; backups are the same wrapped file |
+| Private keys and passphrases | Keys live in the browser as passphrase-sealed blobs (scrypt + AES-256-GCM) that hide even the key's address and role; backups are the same blobs |
 | Who the activist and custodians are | Custodians use a fresh key per vault; nothing on chain names anyone |
 | How to contact anyone | Custodians reach the activist through their own channels |
 | Gas funding | A small serverless tap sends test GLM to fresh keys. It never sees a key, a document or a vault |
