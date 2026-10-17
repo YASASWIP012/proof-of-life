@@ -25,9 +25,9 @@ export function downloadBackup(k: StoredKey) {
   a.click();
 }
 
-export function KeyGate({ role, onReady, title }: { role: Role; onReady: (a: Unlocked, k: StoredKey) => void; title: string }) {
+export function KeyGate({ role, onReady, title, forceNew = false, intro }: { role: Role; onReady: (a: Unlocked, k: StoredKey) => void; title: string; forceNew?: boolean; intro?: string }) {
   const keys = useKeys(role);
-  const [mode, setMode] = useState<"pick" | "new">(keys.length ? "pick" : "new");
+  const [mode, setMode] = useState<"pick" | "new">(keys.length && !forceNew ? "pick" : "new");
   const [sel, setSel] = useState(keys[0]?.address ?? "");
   const [pass, setPass] = useState("");
   const [pass2, setPass2] = useState("");
@@ -94,14 +94,15 @@ export function KeyGate({ role, onReady, title }: { role: Role; onReady: (a: Unl
   return (
     <Card>
       <h2 className="font-serif text-lg font-bold">{title}</h2>
-      <div className="mt-3 flex gap-2 text-sm">
+      {intro && <p className="mt-1 text-sm text-muted">{intro}</p>}
+      {!forceNew && <div className="mt-3 flex gap-2 text-sm">
         {keys.length > 0 && <button className={`rounded-lg px-3 py-1.5 ${mode === "pick" ? "bg-line/60 font-semibold" : ""}`} onClick={() => setMode("pick")}>Use a saved key</button>}
         <button className={`rounded-lg px-3 py-1.5 ${mode === "new" ? "bg-line/60 font-semibold" : ""}`} onClick={() => setMode("new")}>Make a new key</button>
         <label className="cursor-pointer rounded-lg px-3 py-1.5 text-muted hover:text-ink">
           Restore a backup
           <input type="file" accept="application/json" className="hidden" onChange={(e) => e.target.files?.[0] && doImport(e.target.files[0])} />
         </label>
-      </div>
+      </div>}
       <div className="mt-4 space-y-3">
         {mode === "pick" ? (
           <>

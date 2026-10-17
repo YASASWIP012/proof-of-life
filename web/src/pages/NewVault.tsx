@@ -20,7 +20,16 @@ const RHYTHMS = [
 
 export default function NewVault() {
   const [acct, setAcct] = useState<{ a: Unlocked; k: StoredKey } | null>(null);
-  if (!acct) return <div className="mx-auto max-w-xl"><KeyGate role="activist" title="First, your activist key" onReady={(a, k) => setAcct({ a, k })} /></div>;
+  if (!acct)
+    return (
+      <div className="mx-auto max-w-xl">
+        <KeyGate
+          role="activist" forceNew title="A new key for this vault"
+          intro="Every vault gets its own key. On Arkiv, everything a key writes can be listed with one query, so a fresh key per vault means nobody can tell that two vaults belong to the same person. You can use the same passphrase for all of them."
+          onReady={(a, k) => setAcct({ a, k })}
+        />
+      </div>
+    );
   return <Form account={acct.a} />;
 }
 

@@ -1,4 +1,4 @@
-import { keepAlive, loadCiphertext, unsealVault, verificationQueries, type VaultView, type VaultFile } from "@proof-of-life/core";
+import { keepAlive, loadCiphertext, unsealVault, vaultStatus, verificationQueries, type VaultView, type VaultFile } from "@proof-of-life/core";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Hex } from "viem";
@@ -36,8 +36,10 @@ function VaultBody({ view, fetchedAt, events, refresh }: { view: VaultView; fetc
   const graceBlocks = BigInt(Math.ceil(m.grace_s / 2));
   const dueAt = hb ? hb.expiresAt - graceBlocks : null;
   const fraction = dueAt ? Number(dueAt - live) / (m.interval_s / 2) : 0;
-  const phase = view.status.phase;
   const valid = view.releases.filter((r) => r.valid);
+  // Between reads the phase follows the estimated head, so "overdue" and "stopped" show the moment they happen.
+  const status = vaultStatus({ head: live, heartbeatExpiresAt: hb?.expiresAt ?? null, graceS: m.grace_s, k: m.k, validReleases: valid.length });
+  const phase = status.phase;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
@@ -48,7 +50,7 @@ function VaultBody({ view, fetchedAt, events, refresh }: { view: VaultView; fetc
               <p className="text-xs uppercase tracking-wider text-muted">Vault · {m.tag || short(view.vaultId)}</p>
               <h1 className="mt-1 font-serif text-2xl font-bold">{t(`phase_${phase}`)}</h1>
               <p className="mt-1 max-w-md text-sm text-muted">
-                {t(`phase_${phase}_d`, { have: valid.length, k: m.k, need: view.status.releasesNeeded })}
+                {t(`phase_${phase}_d`, { have: valid.length, k: m.k, need: status.releasesNeeded })}
               </p>
             </div>
             <PhaseBadge phase={phase} />
@@ -56,7 +58,7 @@ function VaultBody({ view, fetchedAt, events, refresh }: { view: VaultView; fetc
           <div className="mt-6 flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-8">
             <Pulse phase={phase} fraction={fraction} />
             <dl className="grid w-full gap-3 text-sm">
-              {hb && dueAt !== null && (
+              {hb && dueAt !== null && hb.expiresAt > live && (
                 <>
                   <div>
                     <dt className="text-muted">{t("t_due_in")}</dt>
@@ -232,7 +234,9 @@ function KeepAlive({ view, onDone }: { view: VaultView; onDone: () => void }) {
 
 function VerifyPanel({ view }: { view: VaultView }) {
   const q = verificationQueries(view.vaultId, view.creator);
-  const curl = `curl -s ${TIRAMISU.rpc} -H 'content-type: application/json' --data '${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "arkiv_query", params: [q.heartbeat, { select: { key: true, expiresAt: true, owner: true, creator: true } }] })}'`;
+  // A heredoc keeps the query's own single quotes intact, so this pastes straight into a shell.
+  const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "arkiv_query", params: [q.heartbeat, { select: { key: true, expiresAt: true, owner: true, creator: true } }] });
+  const curl = `curl -s ${TIRAMISU.rpc} -H 'content-type: application/json' --data-binary @- <<'EOF'\n${body}\nEOF`;
   return (
     <Card>
       <h2 className="font-serif text-lg font-bold">Check this without us</h2>

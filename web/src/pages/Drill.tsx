@@ -15,7 +15,7 @@ import { newSecret } from "../lib/keys";
 import { read, readClient } from "../lib/net";
 import { syntheticRtiReply } from "../lib/synthetic";
 import { ensureGas } from "../lib/tap";
-import { attrs, checkIn, hexToBytes } from "@proof-of-life/core";
+import { attrs, checkIn, hexToBytes, vaultStatus } from "@proof-of-life/core";
 import { ExpirationTime, jsonToPayload } from "@arkiv-network/sdk";
 
 type Actor = ReturnType<typeof newSecret> & { name: string; wallet: WalletClient };
@@ -185,6 +185,7 @@ export default function Drill() {
   const hb = view?.heartbeat;
   const dueAt = hb ? hb.expiresAt - BigInt(GRACE / 2) : null;
   const fraction = dueAt ? Number(dueAt - live) / (INTERVAL / 2) : 0;
+  const livePhase = view ? vaultStatus({ head: live, heartbeatExpiresAt: hb?.expiresAt ?? null, graceS: GRACE, k: view.manifest.k, validReleases: view.releases.filter((r) => r.valid).length }).phase : "alive";
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
@@ -211,13 +212,13 @@ export default function Drill() {
         {view && (
           <Card>
             <div className="flex items-center justify-between">
-              <PhaseBadge phase={view.status.phase} />
+              <PhaseBadge phase={livePhase} />
               <Link className="text-sm underline" to={vaultPath(view.vaultId, view.creator)}>Public vault page →</Link>
             </div>
             <div className="mt-4 flex flex-col items-center gap-6 sm:flex-row">
-              <Pulse phase={view.status.phase} fraction={fraction} size={180} />
+              <Pulse phase={livePhase} fraction={fraction} size={180} />
               <div className="space-y-3 text-sm">
-                {dueAt !== null && hb && (
+                {dueAt !== null && hb && hb.expiresAt > live && (
                   <>
                     <p>Check-in due in <b className="font-mono">{dueAt > live ? duration(blocksToSeconds(dueAt - live)) : "now"}</b></p>
                     <p>Stops beating in <b className="font-mono">{duration(blocksToSeconds(hb.expiresAt - live))}</b></p>
