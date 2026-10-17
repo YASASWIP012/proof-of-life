@@ -1,4 +1,4 @@
-import type { Phase } from "@dhadkan/core";
+import type { Phase } from "@proof-of-life/core";
 import { PHASE_COLOR } from "./ui";
 
 /**

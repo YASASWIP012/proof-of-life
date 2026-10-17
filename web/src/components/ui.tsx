@@ -1,7 +1,7 @@
 import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import type { Phase } from "@dhadkan/core";
+import type { Phase } from "@proof-of-life/core";
 import { useI18n } from "../lib/i18n";
-import { explorerTx } from "@dhadkan/core";
+import { explorerTx } from "@proof-of-life/core";
 import { short } from "../lib/format";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {

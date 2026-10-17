@@ -1,5 +1,5 @@
 {
-  "name": "dhadkan",
+  "name": "proof-of-life",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -13,6 +13,6 @@
     "dev": "npm run dev -w web"
   },
   "bin": {
-    "dhadkan": "cli/dist/dhadkan.mjs"
+    "proof-of-life": "cli/dist/proof-of-life.mjs"
   }
 }

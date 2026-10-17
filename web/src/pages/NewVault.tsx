@@ -1,5 +1,5 @@
 // Sealing a real vault: files are encrypted here, split among custodians, and written to Arkiv sealed.
-import { createVault, hexToBytes, MAX_BUNDLE_BYTES, sealVault, walletClient, type Manifest } from "@dhadkan/core";
+import { createVault, hexToBytes, MAX_BUNDLE_BYTES, sealVault, walletClient, type Manifest } from "@proof-of-life/core";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Hex } from "viem";
@@ -117,7 +117,7 @@ function Form({ account }: { account: Unlocked }) {
           <div className="mt-3 space-y-2">
             {invites.map((c, i) => (
               <div key={i}>
-                <input className={`${inputCls} font-mono text-xs`} placeholder="dhadkan-custodian:0x…:0x…" value={c} onChange={(e) => setInvites(invites.map((x, j) => (j === i ? e.target.value : x)))} />
+                <input className={`${inputCls} font-mono text-xs`} placeholder="pol-custodian:0x…:0x…" value={c} onChange={(e) => setInvites(invites.map((x, j) => (j === i ? e.target.value : x)))} />
                 {parsed[i] instanceof Error && <p className="mt-1 text-xs text-lapsed">{(parsed[i] as Error).message}</p>}
               </div>
             ))}

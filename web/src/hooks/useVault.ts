@@ -1,4 +1,4 @@
-import { loadVault, watchVault, type VaultView } from "@dhadkan/core";
+import { loadVault, watchVault, type VaultView } from "@proof-of-life/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Hex } from "viem";
 import { read, sockets } from "../lib/net";

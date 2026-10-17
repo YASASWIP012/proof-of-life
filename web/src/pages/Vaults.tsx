@@ -1,4 +1,4 @@
-import { listVaults, vaultStatus, type VaultSummary, type Phase } from "@dhadkan/core";
+import { listVaults, vaultStatus, type VaultSummary, type Phase } from "@proof-of-life/core";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, PhaseBadge } from "../components/ui";

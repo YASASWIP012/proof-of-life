@@ -1,11 +1,11 @@
-// dhadkan: read, watch, release and open vaults from a terminal, with no website involved.
+// proof-of-life: read, watch, release and open vaults from a terminal, with no website involved.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
   ackCustody, listVaults, loadCiphertext, loadVault, releaseMyShare, socketClient, publicClient, unsealVault, unwrapKey,
   vaultStatus, walletClient, watchVault, BLOCK_SECONDS, type VaultView, type WrappedKey,
-} from "@dhadkan/core";
+} from "@proof-of-life/core";
 import { privateKeyToAccount } from "viem/accounts";
 import { bytesToHex, type Hex } from "viem";
 
@@ -49,7 +49,7 @@ async function loadKey(): Promise<{ account: ReturnType<typeof privateKeyToAccou
   const file = flag("key-file");
   if (!file) throw new Error("--key-file <backup.json> is required");
   const wrapped = JSON.parse(readFileSync(file, "utf8")) as WrappedKey;
-  let pass = process.env.DHADKAN_PASSPHRASE;
+  let pass = process.env.POL_PASSPHRASE;
   if (!pass) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     pass = await rl.question("passphrase: ");
@@ -139,17 +139,17 @@ async function main() {
       return new Promise<number>(() => {});
     }
     default:
-      log(`dhadkan: dead-hand vaults on Arkiv
+      log(`proof-of-life: dead-hand vaults on Arkiv
 
-  dhadkan vaults                                   list every vault and its phase
-  dhadkan status  <vault_id> <creator>             phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released)
-  dhadkan watch   <vault_id> <creator> [--key-file f --auto-release]
-  dhadkan ack     <vault_id> <creator> --key-file f   confirm or renew custody
-  dhadkan release <vault_id> <creator> --key-file f   publish your piece (only after the heartbeat stops)
-  dhadkan open    <vault_id> <creator> [--out dir]    rebuild the key and decrypt a released vault
+  proof-of-life vaults                                   list every vault and its phase
+  proof-of-life status  <vault_id> <creator>             phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released)
+  proof-of-life watch   <vault_id> <creator> [--key-file f --auto-release]
+  proof-of-life ack     <vault_id> <creator> --key-file f   confirm or renew custody
+  proof-of-life release <vault_id> <creator> --key-file f   publish your piece (only after the heartbeat stops)
+  proof-of-life open    <vault_id> <creator> [--out dir]    rebuild the key and decrypt a released vault
 
   --rpc <url> / --ws <url>   any Arkiv endpoint (default: Tiramisu public RPC)
-  DHADKAN_PASSPHRASE         passphrase for --key-file, instead of a prompt`);
+  POL_PASSPHRASE         passphrase for --key-file, instead of a prompt`);
       return 0;
   }
 }

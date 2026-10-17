@@ -1,6 +1,6 @@
 // A throwaway wallet for one-off public actions such as keeping a vault alive. It holds no data and is
 // discarded with the tab.
-import { walletClient } from "@dhadkan/core";
+import { walletClient } from "@proof-of-life/core";
 import { newSecret } from "./keys";
 import { ensureGas } from "./tap";
 

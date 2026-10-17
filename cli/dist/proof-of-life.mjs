@@ -17124,7 +17124,7 @@ var hkdf = (hash4, ikm, salt, info, length) => {
 };
 
 // ../packages/core/src/crypto/ecies.ts
-var INFO = utf8("dhadkan/ecies/v1");
+var INFO = utf8("proof-of-life/ecies/v1");
 var PUB = 33;
 function deriveKey(shared, ephPub, recipientPub) {
   return hkdf(sha256, shared.subarray(1), concat(ephPub, recipientPub), INFO, 32);
@@ -17395,8 +17395,8 @@ async function unwrapKey(w, passphrase) {
 // ../packages/core/src/crypto/vault.ts
 var CHUNK_BYTES = 96 * 1024;
 var MAX_BUNDLE_BYTES = 2 * 1024 * 1024;
-var SHARE_DOMAIN = utf8("dhadkan/share/v1");
-var ENVELOPE_DOMAIN = utf8("dhadkan/envelope/v1");
+var SHARE_DOMAIN = utf8("proof-of-life/share/v1");
+var ENVELOPE_DOMAIN = utf8("proof-of-life/envelope/v1");
 var sha256Hex = (b) => bytesToHex2(sha256(b));
 function shareCommitment(vaultId, share) {
   return sha256Hex(concat(SHARE_DOMAIN, hexToBytes2(vaultId), share));
@@ -49919,7 +49919,7 @@ function date4(params) {
 }
 
 // ../packages/core/src/arkiv/schema.ts
-var PROJECT = "dhadkan";
+var PROJECT = "proof-of-life";
 var SCHEMA_VERSION = 1;
 var SEAL_ADDRESS = "0x000000000000000000000000000000000000dEaD";
 var BLOCK_SECONDS = 2;
@@ -51916,7 +51916,7 @@ async function loadKey() {
   const file2 = flag("key-file");
   if (!file2) throw new Error("--key-file <backup.json> is required");
   const wrapped = JSON.parse(readFileSync(file2, "utf8"));
-  let pass = process.env.DHADKAN_PASSPHRASE;
+  let pass = process.env.POL_PASSPHRASE;
   if (!pass) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     pass = await rl.question("passphrase: ");
@@ -52006,17 +52006,17 @@ async function main() {
       });
     }
     default:
-      log(`dhadkan: dead-hand vaults on Arkiv
+      log(`proof-of-life: dead-hand vaults on Arkiv
 
-  dhadkan vaults                                   list every vault and its phase
-  dhadkan status  <vault_id> <creator>             phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released)
-  dhadkan watch   <vault_id> <creator> [--key-file f --auto-release]
-  dhadkan ack     <vault_id> <creator> --key-file f   confirm or renew custody
-  dhadkan release <vault_id> <creator> --key-file f   publish your piece (only after the heartbeat stops)
-  dhadkan open    <vault_id> <creator> [--out dir]    rebuild the key and decrypt a released vault
+  proof-of-life vaults                                   list every vault and its phase
+  proof-of-life status  <vault_id> <creator>             phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released)
+  proof-of-life watch   <vault_id> <creator> [--key-file f --auto-release]
+  proof-of-life ack     <vault_id> <creator> --key-file f   confirm or renew custody
+  proof-of-life release <vault_id> <creator> --key-file f   publish your piece (only after the heartbeat stops)
+  proof-of-life open    <vault_id> <creator> [--out dir]    rebuild the key and decrypt a released vault
 
   --rpc <url> / --ws <url>   any Arkiv endpoint (default: Tiramisu public RPC)
-  DHADKAN_PASSPHRASE         passphrase for --key-file, instead of a prompt`);
+  POL_PASSPHRASE         passphrase for --key-file, instead of a prompt`);
       return 0;
   }
 }

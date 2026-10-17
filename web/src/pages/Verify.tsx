@@ -1,5 +1,5 @@
-// Everything Dhadkan shows can be checked without Dhadkan.
-import { PROJECT, TIRAMISU } from "@dhadkan/core";
+// Everything Proof of Life shows can be checked without it.
+import { PROJECT, TIRAMISU } from "@proof-of-life/core";
 import { useState } from "react";
 import { Button, Card, Copy, inputCls } from "../components/ui";
 import { read } from "../lib/net";
@@ -31,12 +31,12 @@ export default function Verify() {
         <Card>
           <h2 className="font-semibold">The CLI</h2>
           <p className="mt-1 text-sm text-muted">Status, watch, release and open from a terminal. No browser, no site.</p>
-          <pre className="mono-wrap mt-2 rounded-lg bg-paper p-2 text-xs">npx github:YASASWIP012/dhadkan status &lt;vault_id&gt; &lt;creator&gt;</pre>
+          <pre className="mono-wrap mt-2 rounded-lg bg-paper p-2 text-xs">npx github:YASASWIP012/proof-of-life status &lt;vault_id&gt; &lt;creator&gt;</pre>
         </Card>
         <Card>
           <h2 className="font-semibold">curl</h2>
           <p className="mt-1 text-sm text-muted">One JSON-RPC call to {TIRAMISU.rpc.replace("https://", "")}.</p>
-          <pre className="mono-wrap mt-2 rounded-lg bg-paper p-2 text-xs">{`arkiv_query("project = str('dhadkan') AND type = str('vault')")`}</pre>
+          <pre className="mono-wrap mt-2 rounded-lg bg-paper p-2 text-xs">{`arkiv_query("project = str('proof-of-life') AND type = str('vault')")`}</pre>
         </Card>
         <Card>
           <h2 className="font-semibold">The source</h2>

@@ -2,7 +2,7 @@
 // The clock is shrunk (check in every minute, one minute of grace) so the whole life of a vault fits in a coffee break.
 import {
   ackCustody, createVault, loadVault, releaseMyShare, sealVault, utf8, walletClient, type VaultView, type WalletClient,
-} from "@dhadkan/core";
+} from "@proof-of-life/core";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Hex } from "viem";
@@ -15,7 +15,7 @@ import { newSecret } from "../lib/keys";
 import { read, readClient } from "../lib/net";
 import { syntheticRtiReply } from "../lib/synthetic";
 import { ensureGas } from "../lib/tap";
-import { attrs, checkIn, hexToBytes } from "@dhadkan/core";
+import { attrs, checkIn, hexToBytes } from "@proof-of-life/core";
 import { ExpirationTime, jsonToPayload } from "@arkiv-network/sdk";
 
 type Actor = ReturnType<typeof newSecret> & { name: string; wallet: WalletClient };

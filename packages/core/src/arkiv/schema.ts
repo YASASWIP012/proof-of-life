@@ -1,9 +1,9 @@
-// The Dhadkan data contract on Arkiv. Every name, type and lifetime here is mirrored in /arkiv/schema.md.
+// The Proof of Life data contract on Arkiv. Every name, type and lifetime here is mirrored in /arkiv/schema.md.
 import { bytes32, i32, str, u64, addr } from "@arkiv-network/sdk/attr";
 import { z } from "zod";
 import type { Hex } from "../crypto/bytes.js";
 
-export const PROJECT = "dhadkan";
+export const PROJECT = "proof-of-life";
 export const SCHEMA_VERSION = 1;
 /** Sealed entities are handed to this address. Nobody holds its key, so nobody can delete them. */
 export const SEAL_ADDRESS = "0x000000000000000000000000000000000000dEaD" as const;

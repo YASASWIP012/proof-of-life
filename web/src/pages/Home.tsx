@@ -1,4 +1,4 @@
-import { listVaults, vaultStatus } from "@dhadkan/core";
+import { listVaults, vaultStatus } from "@proof-of-life/core";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Pulse } from "../components/Pulse";

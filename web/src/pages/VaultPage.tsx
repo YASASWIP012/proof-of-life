@@ -1,4 +1,4 @@
-import { keepAlive, loadCiphertext, unsealVault, verificationQueries, type VaultView, type VaultFile } from "@dhadkan/core";
+import { keepAlive, loadCiphertext, unsealVault, verificationQueries, type VaultView, type VaultFile } from "@proof-of-life/core";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Hex } from "viem";
@@ -9,7 +9,7 @@ import { blocksToSeconds, duration, fmtBytes, short } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { read } from "../lib/net";
 import { sessionWallet } from "../lib/session";
-import { TIRAMISU } from "@dhadkan/core";
+import { TIRAMISU } from "@proof-of-life/core";
 
 export default function VaultPage() {
   const { vaultId, creator } = useParams() as { vaultId: Hex; creator: Hex };
@@ -248,8 +248,8 @@ function VerifyPanel({ view }: { view: VaultView }) {
         <pre className="mono-wrap mt-1 whitespace-pre-wrap rounded-lg bg-paper p-2 text-[11px]">{curl}</pre>
       </div>
       <div className="mt-3">
-        <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted">CLI<Copy text={`npx dhadkan status ${view.vaultId} ${view.creator}`} /></div>
-        <pre className="mono-wrap mt-1 rounded-lg bg-paper p-2 text-[11px]">npx dhadkan status {view.vaultId} {view.creator}</pre>
+        <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted">CLI<Copy text={`npx github:YASASWIP012/proof-of-life status ${view.vaultId} ${view.creator}`} /></div>
+        <pre className="mono-wrap mt-1 rounded-lg bg-paper p-2 text-[11px]">npx github:YASASWIP012/proof-of-life status {view.vaultId} {view.creator}</pre>
       </div>
     </Card>
   );

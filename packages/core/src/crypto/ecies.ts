@@ -6,7 +6,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { open, seal } from "./aead.js";
 import { concat, utf8 } from "./bytes.js";
 
-const INFO = utf8("dhadkan/ecies/v1");
+const INFO = utf8("proof-of-life/ecies/v1");
 const PUB = 33;
 
 function deriveKey(shared: Uint8Array, ephPub: Uint8Array, recipientPub: Uint8Array): Uint8Array {

@@ -1,6 +1,6 @@
 // Read clients. Direct-to-Arkiv is the default, so the site works with no server of ours.
 // When the keyless budget runs out, reads retry once through the relay, and the banner says so.
-import { publicClient, socketClient, type PublicClient, type SocketClient } from "@dhadkan/core";
+import { publicClient, socketClient, type PublicClient, type SocketClient } from "@proof-of-life/core";
 import { RELAY_RPC } from "./config";
 
 export type ReadMode = "direct" | "relay";
@@ -14,7 +14,7 @@ let mode: ReadMode = "direct";
 let pinned: ReadMode | null = null;
 
 try {
-  const saved = localStorage.getItem("dhadkan.read");
+  const saved = localStorage.getItem("pol.read");
   if (saved === "direct" || saved === "relay") pinned = mode = saved;
 } catch {}
 
@@ -30,7 +30,7 @@ export function pinReadMode(m: ReadMode | null) {
   pinned = m;
   mode = m ?? "direct";
   try {
-    m ? localStorage.setItem("dhadkan.read", m) : localStorage.removeItem("dhadkan.read");
+    m ? localStorage.setItem("pol.read", m) : localStorage.removeItem("pol.read");
   } catch {}
   listeners.forEach((l) => l(mode));
 }

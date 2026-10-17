@@ -1,4 +1,4 @@
-// Every write Dhadkan makes. Each one is a single atomic batch, so a reader never sees half a vault.
+// Every write Proof of Life makes. Each one is a single atomic batch, so a reader never sees half a vault.
 import { ExpirationTime, jsonToPayload } from "@arkiv-network/sdk";
 import type { Hex } from "viem";
 import { bytesToHex } from "../crypto/bytes.js";

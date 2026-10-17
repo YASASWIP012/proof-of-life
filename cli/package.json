@@ -1,12 +1,12 @@
 {
-  "name": "@dhadkan/cli",
+  "name": "@proof-of-life/cli",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/dhadkan.mjs --banner:js=\"#!/usr/bin/env node\nimport { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\""
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/proof-of-life.mjs --banner:js=\"#!/usr/bin/env node\nimport { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\""
   },
   "dependencies": {
-    "@dhadkan/core": "0.1.0"
+    "@proof-of-life/core": "0.1.0"
   }
 }

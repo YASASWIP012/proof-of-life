@@ -1,4 +1,4 @@
-import { BLOCK_SECONDS } from "@dhadkan/core";
+import { BLOCK_SECONDS } from "@proof-of-life/core";
 
 export const short = (h: string, n = 6) => (h.length > 2 * n + 2 ? `${h.slice(0, n + 2)}…${h.slice(-n)}` : h);
 

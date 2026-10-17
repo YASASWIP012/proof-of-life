@@ -1,5 +1,5 @@
 // Keys live in this browser only, wrapped with a passphrase. Nothing here is ever sent anywhere.
-import { bytesToHex, compressPublicKey, hexToBytes, unwrapKey, wrapKey, type WrappedKey } from "@dhadkan/core";
+import { bytesToHex, compressPublicKey, hexToBytes, unwrapKey, wrapKey, type WrappedKey } from "@proof-of-life/core";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import type { Hex } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
@@ -14,7 +14,7 @@ export type StoredKey = WrappedKey & {
   vaults: { vaultId: Hex; creator: Hex; slot?: number }[];
 };
 
-const STORE = "dhadkan.keys.v1";
+const STORE = "pol.keys.v1";
 
 export function loadKeys(): StoredKey[] {
   try {
@@ -26,7 +26,7 @@ export function loadKeys(): StoredKey[] {
 
 function saveKeys(keys: StoredKey[]) {
   localStorage.setItem(STORE, JSON.stringify(keys));
-  window.dispatchEvent(new Event("dhadkan-keys"));
+  window.dispatchEvent(new Event("pol-keys"));
 }
 
 export const unlocked = new Map<string, PrivateKeyAccount & { secret: Uint8Array }>();
@@ -82,18 +82,18 @@ export function backupBlob(k: StoredKey): Blob {
 
 export function importBackup(json: string): StoredKey {
   const k = JSON.parse(json) as StoredKey;
-  if (k.v !== 1 || k.kdf !== "scrypt" || !k.address || !k.data) throw new Error("not a Dhadkan key backup");
+  if (k.v !== 1 || k.kdf !== "scrypt" || !k.address || !k.data) throw new Error("not a Proof of Life key backup");
   const keys = loadKeys().filter((x) => x.address.toLowerCase() !== k.address.toLowerCase());
   saveKeys([...keys, { ...k, vaults: k.vaults ?? [] }]);
   return k;
 }
 
 /** A custodian invite: the per-vault public key and address, nothing else. */
-export const inviteCode = (k: Pick<StoredKey, "address" | "pubkey">) => `dhadkan-custodian:${k.address}:${k.pubkey}`;
+export const inviteCode = (k: Pick<StoredKey, "address" | "pubkey">) => `pol-custodian:${k.address}:${k.pubkey}`;
 
 export function parseInvite(code: string): { address: Hex; pubkey: Hex } {
-  const m = code.trim().match(/^dhadkan-custodian:(0x[0-9a-fA-F]{40}):(0x[0-9a-fA-F]{66})$/);
-  if (!m) throw new Error("that is not a Dhadkan custodian invite");
+  const m = code.trim().match(/^pol-custodian:(0x[0-9a-fA-F]{40}):(0x[0-9a-fA-F]{66})$/);
+  if (!m) throw new Error("that is not a Proof of Life custodian invite");
   const pub = hexToBytes(m[2]);
   const address = privateKeyAddressFromPub(pub);
   if (address.toLowerCase() !== m[1].toLowerCase()) throw new Error("invite address does not match its public key");

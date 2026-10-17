@@ -13,7 +13,7 @@ const I18n = createContext<Ctx | null>(null);
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = useState<Lang>(() => {
     try {
-      const saved = localStorage.getItem("dhadkan.lang") as Lang | null;
+      const saved = localStorage.getItem("pol.lang") as Lang | null;
       if (saved && saved in DICTS) return saved;
     } catch {}
     const nav = navigator.language.slice(0, 2);
@@ -22,7 +22,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = lang;
     try {
-      localStorage.setItem("dhadkan.lang", lang);
+      localStorage.setItem("pol.lang", lang);
     } catch {}
   }, [lang]);
   const t: Ctx["t"] = (k, vars) => {

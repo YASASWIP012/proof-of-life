@@ -12,8 +12,8 @@ export function useKeys(role: Role) {
   const [keys, setKeys] = useState(() => loadKeys().filter((k) => k.role === role));
   useEffect(() => {
     const on = () => setKeys(loadKeys().filter((k) => k.role === role));
-    window.addEventListener("dhadkan-keys", on);
-    return () => window.removeEventListener("dhadkan-keys", on);
+    window.addEventListener("pol-keys", on);
+    return () => window.removeEventListener("pol-keys", on);
   }, [role]);
   return keys;
 }
@@ -21,7 +21,7 @@ export function useKeys(role: Role) {
 export function downloadBackup(k: StoredKey) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(backupBlob(k));
-  a.download = `dhadkan-${k.role}-${k.address.slice(2, 8)}.json`;
+  a.download = `proof-of-life-${k.role}-${k.address.slice(2, 8)}.json`;
   a.click();
 }
 

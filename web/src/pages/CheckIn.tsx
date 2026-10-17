@@ -1,5 +1,5 @@
 // The one screen an activist opens every week: "I'm safe".
-import { checkIn, loadVault, walletClient, type VaultView } from "@dhadkan/core";
+import { checkIn, loadVault, walletClient, type VaultView } from "@proof-of-life/core";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { KeyGate, type Unlocked } from "../components/KeyGate";

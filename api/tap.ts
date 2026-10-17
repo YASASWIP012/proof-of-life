@@ -1,4 +1,4 @@
-// Sends a little test GLM to a fresh browser key so people can try Dhadkan without a wallet or a faucet.
+// Sends a little test GLM to a fresh browser key so people can try Proof of Life without a wallet or a faucet.
 import { createPublicClient, createWalletClient, http, isAddress, parseEther, formatEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { tiramisu } from "@arkiv-network/sdk/chains";

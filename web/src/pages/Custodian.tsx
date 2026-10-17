@@ -1,5 +1,5 @@
 // For the people an activist trusts: make a one-vault key, confirm custody, and release when the heartbeat stops.
-import { ackCustody, envelopesFor, loadVault, releaseMyShare, walletClient, type VaultView } from "@dhadkan/core";
+import { ackCustody, envelopesFor, loadVault, releaseMyShare, walletClient, type VaultView } from "@proof-of-life/core";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { KeyGate, useKeys, type Unlocked } from "../components/KeyGate";

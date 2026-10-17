@@ -17,7 +17,7 @@ export function Logo() {
   return (
     <Link to="/" className="flex items-center gap-2 font-serif text-xl font-bold">
       <svg viewBox="0 0 32 32" className="h-7 w-7"><path d="M2 17h7l3-7 5 14 4-10 2 3h7" fill="none" stroke="var(--color-pulse)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-      Dhadkan <span className="text-base font-normal text-muted">धड़कन</span>
+      Proof of Life <span className="text-base font-normal text-muted">धड़कन</span>
     </Link>
   );
 }

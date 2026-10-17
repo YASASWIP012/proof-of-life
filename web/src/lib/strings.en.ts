@@ -21,7 +21,7 @@ export const en = {
   why_2: "the Whistle Blowers Protection Act, 2014 has waited to come into force.",
   why_3_n: "0",
   why_3: "tools that release an activist's findings automatically if they are silenced.",
-  why_story: "After RTI users were murdered in Maharashtra, researchers found that some families had burned the documents out of fear. The Information Commission once ordered that whatever a killed activist had asked for be published at once. Dhadkan makes that order automatic, and takes away the reason to kill.",
+  why_story: "After RTI users were murdered in Maharashtra, researchers found that some families had burned the documents out of fear. The Information Commission once ordered that whatever a killed activist had asked for be published at once. Proof of Life makes that order automatic, and takes away the reason to kill.",
 
   how_title: "How it works",
   how_1_t: "Seal",

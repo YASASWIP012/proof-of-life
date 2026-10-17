@@ -1,4 +1,4 @@
-// Seals a set of documents into a Dhadkan vault: one data key, k-of-n shares, one envelope per custodian.
+// Seals a set of documents into a Proof of Life vault: one data key, k-of-n shares, one envelope per custodian.
 import { sha256 } from "@noble/hashes/sha2.js";
 import { open, seal } from "./aead.js";
 import { bytesToHex, concat, equalBytes, fromBase64, fromUtf8, hexToBytes, randomBytes, toBase64, utf8, type Hex } from "./bytes.js";
@@ -31,8 +31,8 @@ export type SealedVault = {
   envelopes: Uint8Array[];
 };
 
-const SHARE_DOMAIN = utf8("dhadkan/share/v1");
-const ENVELOPE_DOMAIN = utf8("dhadkan/envelope/v1");
+const SHARE_DOMAIN = utf8("proof-of-life/share/v1");
+const ENVELOPE_DOMAIN = utf8("proof-of-life/envelope/v1");
 
 export const sha256Hex = (b: Uint8Array): Hex => bytesToHex(sha256(b));
 
