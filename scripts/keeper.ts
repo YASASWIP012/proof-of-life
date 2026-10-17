@@ -31,7 +31,7 @@ for (const [name, r] of Object.entries(registry)) {
       console.log(`  custodian ${i + 1} released ${tx.txHash}`);
       v = await loadVault(reader, r.vaultId, r.creator);
     } else if (!released && v.heartbeat && (!ack || ack.expiresAt - v.head < 5n * DAY_BLOCKS)) {
-      const tx = await ackCustody(walletClient(c, { rpc }), { vaultId: r.vaultId, slot: i + 1, existingKey: ack?.key });
+      const tx = await ackCustody(walletClient(c, { rpc }), { vaultId: r.vaultId, slot: i + 1, existingKey: ack?.key, listed: true });
       console.log(`  custodian ${i + 1} renewed custody ${tx.txHash}`);
     }
   }

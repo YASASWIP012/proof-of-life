@@ -7,6 +7,7 @@ import { readBeat } from "../crypto/duress.js";
 import type { PublicClient, WalletClient } from "./client.js";
 import type { VaultView } from "./reads.js";
 import { mayRelease } from "./status.js";
+import { isListed } from "./schema.js";
 import { publishRelease } from "./writes.js";
 
 export class NotYet extends Error {
@@ -34,6 +35,7 @@ export async function releaseMyShare(wallet: WalletClient, reader: PublicClient,
   const body = toNewsroom ? encryptTo(hexToBytes(view.manifest.release.newsroom_pubkey!), share) : share;
   return publishRelease(wallet, reader, {
     vaultId: view.vaultId,
+    listed: isListed(view.manifest),
     payload: { v: 1, slot: seat.slot, share: bytesToHex(body), sealed_to_newsroom: toNewsroom, observed_lapse_block: view.head.toString() },
   });
 }

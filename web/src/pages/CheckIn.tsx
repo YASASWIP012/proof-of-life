@@ -2,7 +2,7 @@
 // vault is found on Arkiv by its creator, so the phone keeps no list of vaults.
 // A key opened with its duress passphrase checks in exactly like a normal one, on screen and on chain. The only
 // difference is inside the check-in note, encrypted to each custodian, which tells them to release now.
-import { beatPayload, checkIn, listVaults, loadVault, walletClient, type VaultView } from "@proof-of-life/core";
+import { beatPayload, checkIn, isListed, listVaults, loadVault, walletClient, type VaultView } from "@proof-of-life/core";
 import type { Hex } from "viem";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -43,7 +43,7 @@ export default function CheckIn() {
         if (!hb) continue;
         await ensureGas(r.key.account.address);
         const m = r.view.manifest;
-        const beat = { vaultId: r.view.vaultId, payload: beatPayload(r.view.vaultId, m.custodians.map((c) => c.pubkey as Hex), r.key.duress) };
+        const beat = { vaultId: r.view.vaultId, payload: beatPayload(r.view.vaultId, m.custodians.map((c) => c.pubkey as Hex), r.key.duress), listed: isListed(m) };
         await checkIn(walletClient(r.key.account), { heartbeatKey: hb.key, intervalS: m.interval_s, graceS: m.grace_s, sealed: r.view.sealedKeys, head: r.view.head, beat });
       }
       // Same words either way, by design.

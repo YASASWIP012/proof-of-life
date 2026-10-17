@@ -56,7 +56,7 @@ Problems come first, then paths we tested that worked, documented with the same 
 - **Expected:** "insufficient funds" with the address and balance, which is what viem produces for a plain transfer.
 - **Actual:** a `createEntity` from a fresh wallet with 0 GLM fails with exactly the text of F1 and F2: `Transaction failed: Execution error without revert data`. Three different causes (payload too large, batch too large, no gas) share one message.
 - **Repro:** `npx tsx scripts/probe.ts unfunded` prints `unfunded write: Transaction failed: Execution error without revert data`.
-- **What would fix it:** map an `insufficient funds` estimate failure to an `InsufficientGLM { address, balance }` error and the HTTP 400 from F2 to a size error. The ownership errors already show the standard to aim for (see W5).
+- **What would fix it:** map an `insufficient funds` estimate failure to an `InsufficientGLM { address, balance }` error, and the RPC's HTTP 413 from F1 and F2 to a size error. The ownership errors already show the standard to aim for (see W5).
 
 ### F4. Lifetime is not priced, although the docs say it is
 
@@ -83,22 +83,6 @@ Problems come first, then paths we tested that worked, documented with the same 
 - **What we did:** one claim to a MetaMask wallet, one transfer to a project treasury, and every other wallet derived from one mnemonic ([`scripts/env.ts`](../scripts/env.ts), [`scripts/fund.ts`](../scripts/fund.ts)). Those 10 GLM covered the whole build: every probe, four end-to-end runs, demo seeding and the gas tap judges use.
 - **What would fix it:** show "Use a different address" on the first screen, and put the 10 GLM per hour per wallet numbers on the Tiramisu page.
 
-### F6. A public site cannot carry an access key, and the keyless budget is small
-
-- **Surface:** public RPC limits; Access Keys docs ("Keep the key out of the browser").
-- **Expected:** a censorship-resistant app reads Arkiv directly from the browser.
-- **Actual:** the docs are right that a key in the page can be stolen. That leaves two options: read keyless and risk running out mid-demo, or run a relay with a key and add the server the app exists to avoid.
-- **What we did:** we designed for the budget. A vault page costs **one query** (W6) and the directory three. Reads go direct by default; on a rate-limit style failure the app retries once through a small allowlisted relay ([`api/rpc.ts`](../api/rpc.ts)), and the footer says which path is in use. The CLI and curl recipes never use the relay.
-- **What would fix it:** an origin-locked "publishable" key that is meant to be public, or a per-origin browser quota.
-
-### F7. No event when an entity expires
-
-- **Surface:** `watchEntityEvents`; documented in Live Events ("An entity that reaches its expiration date fires no event").
-- **Expected (for this product):** the heartbeat lapsing is the one moment that matters, so we wanted an event.
-- **Actual:** as documented, nothing fires. In `scripts/probe.ts ws` an entity created with a 20-second life produced `created` and `extended` events and nothing when it expired (blocks 692428 to 692435).
-- **Our workaround:** pages and the CLI set a timer from the heartbeat's own `$expiresAt`, then confirm with one query ([`events.ts`](../packages/core/src/arkiv/events.ts)).
-- **What would fix it:** a synthetic `EntityExpired` event, or `arkiv_expiringBetween(from, to)` so a watcher can catch up after downtime.
-
 ---
 
 ## Paths we tested that worked
@@ -118,7 +102,7 @@ Problems come first, then paths we tested that worked, documented with the same 
 ### W3. `extendEntity` sets the expiry, it does not add to it
 
 - **Expected (docs):** a check-in of `fromSeconds(interval + grace)` counts from now.
-- **Actual:** confirmed. In run 3 a check-in moved the heartbeat from block 692371 to 692379, which is now plus 30 blocks, not the old expiry plus 30. A dead man's switch needs exactly this.
+- **Actual:** confirmed. Run 3 used `interval + grace = 60 s`, which is 30 blocks. The heartbeat's expiry before the check-in was block 692371; after it, 692379. Adding 30 blocks to the old expiry would have given 692401. The new expiry, 692379, is 22 blocks earlier than that, so the extension counted from the check-in, not from the old expiry. (Both numbers are in `scripts/e2e-report-3.json`, field `checkInMovedExpiry`.)
 
 ### W4. WebSocket events over `wss://` with the key in the path
 
@@ -138,6 +122,26 @@ Problems come first, then paths we tested that worked, documented with the same 
 `npx tsx scripts/e2e.ts <run>` funds four fresh wallets, seals a three-chunk vault, confirms custody, checks in, waits for the lapse, releases 2 of 3 and decrypts from the chain alone. Run 3 finished in 134 seconds with `{"phase":"released","verified":true,"bigMatches":true}` ([`scripts/e2e-report-3.json`](../scripts/e2e-report-3.json)).
 
 ---
+
+## Documented constraints we tested and designed around
+
+These match the docs, so they are not defects. We list what we expected, what we measured, and what we built.
+
+### D1. A public site cannot carry an access key, so we designed for the keyless budget
+
+- **Surface:** public RPC limits; Access Keys docs ("Keep the key out of the browser").
+- **Expected:** a censorship-resistant app reads Arkiv directly from the browser.
+- **Actual:** the docs are right that a key in the page can be stolen. That leaves two options: read keyless and risk running out mid-demo, or run a relay with a key and add the server the app exists to avoid.
+- **What we did:** we designed for the budget. A vault page costs **one query** (W6) and the directory three. Reads go direct by default; on a rate-limit style failure the app retries once through a small allowlisted relay ([`api/rpc.ts`](../api/rpc.ts)), and the footer says which path is in use. The CLI and curl recipes never use the relay.
+- **What would fix it:** an origin-locked "publishable" key that is meant to be public, or a per-origin browser quota.
+
+### D2. No event fires when an entity expires
+
+- **Surface:** `watchEntityEvents`; documented in Live Events ("An entity that reaches its expiration date fires no event").
+- **Expected (from the docs):** no event at expiry.
+- **Actual:** as documented, nothing fires. In `scripts/probe.ts ws` an entity created with a 20-second life produced `created` and `extended` events and nothing when it expired (blocks 692428 to 692435).
+- **Our workaround:** pages and the CLI set a timer from the heartbeat's own `$expiresAt`, then confirm with one query ([`events.ts`](../packages/core/src/arkiv/events.ts)).
+- **What would fix it:** a synthetic `EntityExpired` event, or `arkiv_expiringBetween(from, to)` so a watcher can catch up after downtime.
 
 ## Measured costs (Tiramisu, 17 October 2026)
 

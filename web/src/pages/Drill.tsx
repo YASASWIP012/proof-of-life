@@ -88,7 +88,7 @@ export default function Drill() {
       const res = await createVault(activist.wallet, readClient(), {
         sealed, k: 2,
         custodians: custodians.map((c) => ({ address: c.account.address, pubkey: c.pubkey })),
-        intervalS: INTERVAL, graceS: GRACE, mode: "public", vaultDays: 30, tag: "drill",
+        intervalS: INTERVAL, graceS: GRACE, mode: "public", vaultDays: 30, listed: true,
       }, (p) => p.txHash && add({ text: p.stage === "chunks" ? `Ciphertext chunk ${p.done}/${p.total} written and sealed` : "Manifest, 3 envelopes and the heartbeat written in one batch", tx: p.txHash }));
       vaultRef.current = { vaultId: sealed.vaultId, creator: activist.account.address, heartbeatKey: res.heartbeatKey };
 

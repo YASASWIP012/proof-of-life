@@ -21,16 +21,20 @@ export const LIFETIME = {
   defaultVaultDays: 365,
 } as const;
 
-export const base = (kind: Kind, vaultId: Hex) => ({
-  project: str(PROJECT),
+/**
+ * Listed vaults carry the project tag, so the public directory can find them. Unlisted vaults (the default for
+ * real use) leave it off: they can be found only by someone who already holds the vault link.
+ */
+export const base = (kind: Kind, vaultId: Hex, listed = true) => ({
+  ...(listed ? { project: str(PROJECT) } : {}),
   v: i32(SCHEMA_VERSION),
   type: str(kind),
   vault_id: bytes32(vaultId),
 });
 
 export const attrs = {
-  vault: (p: { vaultId: Hex; k: number; n: number; mode: ReleaseMode; intervalS: number; graceS: number; chunks: number; sealedAtMs: number }) => ({
-    ...base("vault", p.vaultId),
+  vault: (p: { vaultId: Hex; k: number; n: number; mode: ReleaseMode; intervalS: number; graceS: number; chunks: number; sealedAtMs: number; listed: boolean }) => ({
+    ...base("vault", p.vaultId, p.listed),
     k: i32(p.k),
     n: i32(p.n),
     mode: str(p.mode),
@@ -39,17 +43,17 @@ export const attrs = {
     chunks: i32(p.chunks),
     sealed_at_ms: u64(BigInt(p.sealedAtMs)),
   }),
-  chunk: (vaultId: Hex, idx: number) => ({ ...base("chunk", vaultId), idx: i32(idx) }),
-  envelope: (vaultId: Hex, slot: number, custodian: Hex) => ({ ...base("envelope", vaultId), slot: i32(slot), custodian: addr(custodian) }),
-  heartbeat: (vaultId: Hex, intervalS: number, graceS: number) => ({
-    ...base("heartbeat", vaultId),
+  chunk: (vaultId: Hex, idx: number, listed = true) => ({ ...base("chunk", vaultId, listed), idx: i32(idx) }),
+  envelope: (vaultId: Hex, slot: number, custodian: Hex, listed = true) => ({ ...base("envelope", vaultId, listed), slot: i32(slot), custodian: addr(custodian) }),
+  heartbeat: (vaultId: Hex, intervalS: number, graceS: number, listed = true) => ({
+    ...base("heartbeat", vaultId, listed),
     interval_s: u64(BigInt(intervalS)),
     grace_s: u64(BigInt(graceS)),
   }),
-  ack: (vaultId: Hex, slot: number) => ({ ...base("ack", vaultId), slot: i32(slot) }),
+  ack: (vaultId: Hex, slot: number, listed = true) => ({ ...base("ack", vaultId, listed), slot: i32(slot) }),
   /** One per check-in. Its payload carries an encrypted ok/duress flag for each custodian. */
-  beat: (vaultId: Hex) => base("beat", vaultId),
-  release: (vaultId: Hex, slot: number) => ({ ...base("release", vaultId), slot: i32(slot) }),
+  beat: (vaultId: Hex, listed = true) => base("beat", vaultId, listed),
+  release: (vaultId: Hex, slot: number, listed = true) => ({ ...base("release", vaultId, listed), slot: i32(slot) }),
 };
 
 export const ReleaseMode = z.enum(["public", "newsroom"]);
@@ -72,12 +76,15 @@ export const Manifest = z.object({
   grace_s: z.number().int().positive(),
   release: z.object({ mode: ReleaseMode, newsroom_pubkey: hex.optional() }),
   sealed_at_ms: z.number().int(),
-  /** A short public tag the activist picks so custodians can tell vaults apart. Never a name. */
-  tag: z.string().max(24),
+  /** Whether the vault appears in the public directory. Absent on early demo vaults, which were all listed. */
+  listed: z.boolean().optional(),
+  /** Only on early demo vaults. New vaults write no free text in public. */
+  tag: z.string().max(24).optional(),
 }).refine((m) => m.n === m.custodians.length && m.k <= m.n && m.commitments.length === m.n && m.chunks.hashes.length === m.chunks.count, {
   message: "manifest counts do not agree",
 });
 export type Manifest = z.infer<typeof Manifest>;
+export const isListed = (m: Pick<Manifest, "listed">) => m.listed !== false;
 
 /** What a custodian publishes when it releases. In newsroom mode the share is encrypted to the newsroom. */
 export const ReleasePayload = z.object({

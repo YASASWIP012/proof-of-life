@@ -60,7 +60,7 @@ export async function loadVault(client: PublicClient, vaultId: Hex, creator: Hex
   const rows: Row[] = [];
   let page = await client
     .select(FIELDS)
-    .where(eq("project", str(PROJECT)), eq("vault_id", bytes32(vaultId)), not(eq("type", str("chunk"))))
+    .where(eq("vault_id", bytes32(vaultId)), not(eq("type", str("chunk"))))
     .limit(200)
     .fetch();
   rows.push(...(page.entities as unknown as Row[]));
@@ -181,7 +181,7 @@ export async function loadCiphertext(client: PublicClient, view: VaultView): Pro
   const rows: Row[] = [];
   let page = await client
     .select(FIELDS)
-    .where(eq("project", str(PROJECT)), eq("vault_id", bytes32(view.vaultId)), eq("type", str("chunk")))
+    .where(eq("vault_id", bytes32(view.vaultId)), eq("type", str("chunk")))
     .createdBy(view.creator)
     .limit(50)
     .fetch();
@@ -203,10 +203,19 @@ export type VaultSummary = { key: Hex; vaultId: Hex; creator: Hex; tag?: string;
 
 /** The public directory: two queries for every vault and every live heartbeat. */
 export async function listVaults(client: PublicClient, opts: { creator?: Hex; limit?: number } = {}): Promise<{ head: bigint; vaults: VaultSummary[] }> {
-  const q = (type: string) => {
-    let b = client.select({ key: true, creator: true, createdAt: true, expiresAt: true, attributes: true }).where(eq("project", str(PROJECT)), eq("type", str(type)));
+  // The public directory reads listed vaults only. Asking for one creator's vaults finds unlisted ones too,
+  // because it filters by $creator instead of the project tag. Every page is walked with the cursor.
+  const q = async (type: string) => {
+    const where = opts.creator ? [eq("type", str(type))] : [eq("project", str(PROJECT)), eq("type", str(type))];
+    let b = client.select({ key: true, creator: true, createdAt: true, expiresAt: true, attributes: true }).where(...where);
     if (opts.creator) b = b.createdBy(opts.creator);
-    return b.limit(opts.limit ?? 200).fetch();
+    let page = await b.limit(opts.limit ?? 200).fetch();
+    const entities = [...page.entities];
+    while (page.hasNextPage() && entities.length < 2000) {
+      page = await page.next();
+      entities.push(...page.entities);
+    }
+    return { entities, blockNumber: page.blockNumber };
   };
   const [vaults, beats, releases] = await Promise.all([q("vault"), q("heartbeat"), q("release")]);
   const beatOf = new Map<string, bigint>();
@@ -237,7 +246,7 @@ export async function listVaults(client: PublicClient, opts: { creator?: Hex; li
 export async function envelopesFor(client: PublicClient, custodian: Hex) {
   const page = await client
     .select({ key: true, creator: true, createdAt: true, attributes: true })
-    .where(eq("project", str(PROJECT)), eq("type", str("envelope")), eq("custodian", addrAttr(custodian)))
+    .where(eq("type", str("envelope")), eq("custodian", addrAttr(custodian)))
     .limit(200)
     .fetch();
   return (page.entities as unknown as Row[]).map((r) => ({ key: r.key, vaultId: text(r, "vault_id") as Hex, creator: getAddress(r.creator), slot: num(r, "slot"), createdAt: r.createdAt }));
@@ -245,7 +254,7 @@ export async function envelopesFor(client: PublicClient, custodian: Hex) {
 
 /** The exact query strings a reader can paste anywhere to check a vault without this app. */
 export function verificationQueries(vaultId: Hex, creator: Hex) {
-  const base = `project = str('${PROJECT}') AND vault_id = bytes32(${vaultId})`;
+  const base = `vault_id = bytes32(${vaultId})`;
   return {
     everything: `${base} AND NOT (type = str('chunk'))`,
     heartbeat: `${base} AND type = str('heartbeat') AND $creator = addr(${creator})`,

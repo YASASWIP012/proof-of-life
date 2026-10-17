@@ -1,5 +1,5 @@
 // For the people an activist trusts: make a one-vault key, confirm custody, and release when the heartbeat stops.
-import { ackCustody, duressSignal, envelopesFor, loadVault, releaseMyShare, walletClient, type VaultView } from "@proof-of-life/core";
+import { ackCustody, duressSignal, isListed, envelopesFor, loadVault, releaseMyShare, walletClient, type VaultView } from "@proof-of-life/core";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { KeyGate, useBlobCount } from "../components/KeyGate";
@@ -94,7 +94,7 @@ function Seat({ account, openKey }: { account: OpenKey["account"]; openKey: Open
               {duress && <div className="mt-3"><Notice tone="danger">The activist's last check-in used their duress passphrase. Only you and the other custodians can see this. Publish your piece now.</Notice></div>}
               {v.status.phase === "overdue" && <div className="mt-3"><Notice tone="warn">The activist is late. Try to reach them now, through the channel you agreed on.</Notice></div>}
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button variant="ghost" disabled={busy} onClick={() => act(() => ackCustody(walletClient(account), { vaultId: v.vaultId, slot: seat.slot, existingKey: ack?.key }), ack ? "Custody renewed for 14 days." : "Custody confirmed.")}>
+                <Button variant="ghost" disabled={busy} onClick={() => act(() => ackCustody(walletClient(account), { vaultId: v.vaultId, slot: seat.slot, existingKey: ack?.key, listed: isListed(v.manifest) }), ack ? "Custody renewed for 14 days." : "Custody confirmed.")}>
                   {ack ? `Renew custody (${duration(blocksToSeconds(ack.expiresAt - v.head))} left)` : "Confirm I hold my key"}
                 </Button>
                 <Button variant="danger" disabled={busy || !canRelease} onClick={() => act(() => releaseMyShare(walletClient(account), readClient(), v, account.secret), "Your piece is public.")}>

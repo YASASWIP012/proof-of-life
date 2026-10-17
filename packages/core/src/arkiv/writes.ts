@@ -44,7 +44,10 @@ export type CreateVaultInput = {
   mode: ReleaseMode;
   newsroomPubkey?: Hex;
   vaultDays?: number;
-  tag: string;
+  /** Show the vault in the public directory. Off by default for real vaults. */
+  listed?: boolean;
+  /** Let anyone extend the sealed data. On by default so evidence can outlive the activist; off leaves expiry to the activist alone. */
+  keepAliveByAnyone?: boolean;
   /** Chunks per transaction. Large payload batches can exceed the node's transaction size limit. */
   chunksPerTx?: number;
 };
@@ -56,6 +59,8 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
   const vaultDays = Math.max(input.vaultDays ?? LIFETIME.defaultVaultDays, LIFETIME.minVaultDays);
   const expires = ExpirationTime.fromDays(vaultDays);
   const perTx = Math.max(1, input.chunksPerTx ?? 1);
+  const listed = input.listed ?? false;
+  const SEAL = { readonly: true, permissionlessExtension: input.keepAliveByAnyone ?? true } as const;
   const txs: Hex[] = [];
 
   // 1. Ciphertext first. Chunks without a manifest are inert, so a failed upload exposes nothing.
@@ -64,7 +69,7 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
     const r = await sealedBatch(
       wallet,
       reader,
-      slice.map((bytes, j) => ({ payload: bytes, contentType: BIN, attributes: attrs.chunk(sealed.vaultId, i + j), expires, flags: SEALED })),
+      slice.map((bytes, j) => ({ payload: bytes, contentType: BIN, attributes: attrs.chunk(sealed.vaultId, i + j, listed), expires, flags: SEAL })),
     );
     txs.push(r.txHash);
     onProgress({ stage: "chunks", done: Math.min(i + perTx, sealed.chunks.length), total: sealed.chunks.length, txHash: r.txHash });
@@ -84,28 +89,28 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
     grace_s: graceS,
     release: { mode: input.mode, newsroom_pubkey: input.newsroomPubkey },
     sealed_at_ms: Date.now(),
-    tag: input.tag,
+    listed,
   });
   const creates = [
     {
       payload: jsonToPayload(manifest),
       contentType: JSON_T,
-      attributes: attrs.vault({ vaultId: sealed.vaultId, k: input.k, n: input.custodians.length, mode: input.mode, intervalS, graceS, chunks: sealed.chunks.length, sealedAtMs: manifest.sealed_at_ms }),
+      attributes: attrs.vault({ vaultId: sealed.vaultId, k: input.k, n: input.custodians.length, mode: input.mode, intervalS, graceS, chunks: sealed.chunks.length, sealedAtMs: manifest.sealed_at_ms, listed }),
       expires,
-      flags: SEALED,
+      flags: SEAL,
     },
     ...sealed.envelopes.map((env, i) => ({
       payload: env,
       contentType: BIN,
-      attributes: attrs.envelope(sealed.vaultId, i + 1, input.custodians[i].address),
+      attributes: attrs.envelope(sealed.vaultId, i + 1, input.custodians[i].address, listed),
       expires,
-      flags: SEALED,
+      flags: SEAL,
     })),
     // The heartbeat stays with the activist: only its owner can extend it, and nobody else may keep it beating.
     {
       payload: new Uint8Array(),
       contentType: BIN,
-      attributes: attrs.heartbeat(sealed.vaultId, intervalS, graceS),
+      attributes: attrs.heartbeat(sealed.vaultId, intervalS, graceS, listed),
       expires: ExpirationTime.fromSeconds(intervalS + graceS),
       flags: { readonly: true, permissionlessExtension: false },
     },
@@ -124,7 +129,7 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
  */
 export async function checkIn(
   wallet: WalletClient,
-  p: { heartbeatKey: Hex; intervalS: number; graceS: number; sealed?: { key: Hex; expiresAt: bigint }[]; head?: bigint; vaultDays?: number; beat?: { vaultId: Hex; payload: Uint8Array } },
+  p: { heartbeatKey: Hex; intervalS: number; graceS: number; sealed?: { key: Hex; expiresAt: bigint }[]; head?: bigint; vaultDays?: number; beat?: { vaultId: Hex; payload: Uint8Array; listed?: boolean } },
 ) {
   const keepDays = p.vaultDays ?? LIFETIME.defaultVaultDays;
   const soon = (p.head ?? 0n) + BigInt(30 * 43_200);
@@ -133,7 +138,7 @@ export async function checkIn(
   const life = ExpirationTime.fromSeconds(evenSeconds(p.intervalS + p.graceS));
   return wallet.executeBatch({
     creates: p.beat
-      ? [{ payload: p.beat.payload, contentType: BIN, attributes: attrs.beat(p.beat.vaultId), expires: life, flags: { readonly: true, permissionlessExtension: false } }]
+      ? [{ payload: p.beat.payload, contentType: BIN, attributes: attrs.beat(p.beat.vaultId, p.beat.listed ?? true), expires: life, flags: { readonly: true, permissionlessExtension: false } }]
       : undefined,
     extensions: [
       { entityKey: p.heartbeatKey, expires: life },
@@ -143,24 +148,24 @@ export async function checkIn(
 }
 
 /** A custodian's lease on its role. Creating it says "I hold my key"; extending it says "still here". */
-export async function ackCustody(wallet: WalletClient, p: { vaultId: Hex; slot: number; existingKey?: Hex }) {
+export async function ackCustody(wallet: WalletClient, p: { vaultId: Hex; slot: number; existingKey?: Hex; listed?: boolean }) {
   const expires = ExpirationTime.fromDays(LIFETIME.ackDays);
   if (p.existingKey) return wallet.extendEntity({ entityKey: p.existingKey, expires });
   return wallet.createEntity({
     payload: new Uint8Array(),
     contentType: BIN,
-    attributes: attrs.ack(p.vaultId, p.slot),
+    attributes: attrs.ack(p.vaultId, p.slot, p.listed ?? true),
     expires,
     flags: { readonly: true, permissionlessExtension: false },
   });
 }
 
-export async function publishRelease(wallet: WalletClient, reader: PublicClient, p: { vaultId: Hex; payload: ReleasePayload; vaultDays?: number }) {
+export async function publishRelease(wallet: WalletClient, reader: PublicClient, p: { vaultId: Hex; payload: ReleasePayload; vaultDays?: number; listed?: boolean }) {
   return sealedBatch(wallet, reader, [
     {
       payload: jsonToPayload(p.payload),
       contentType: JSON_T,
-      attributes: attrs.release(p.vaultId, p.payload.slot),
+      attributes: attrs.release(p.vaultId, p.payload.slot, p.listed ?? true),
       expires: ExpirationTime.fromDays(p.vaultDays ?? LIFETIME.defaultVaultDays),
       flags: SEALED,
     },

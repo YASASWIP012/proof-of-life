@@ -19,7 +19,7 @@ for (const to of [activist.address, ...cs.map((c) => c.address)]) await reader.w
 
 const pubs = cs.map((c) => bytesToHex(pub(c.secret)) as Hex);
 const sealed = sealVault({ title: "duress test", note: "synthetic", k: 2, custodianPubKeys: cs.map((c) => pub(c.secret)), files: [{ name: "a.txt", type: "text/plain", bytes: utf8("synthetic") }] });
-const res = await createVault(walletClient(activist, { rpc }), reader, { sealed, k: 2, intervalS: 3600, graceS: 3600, mode: "public", tag: "duress-test", vaultDays: 30, custodians: cs.map((c, i) => ({ address: c.address, pubkey: pubs[i] })) });
+const res = await createVault(walletClient(activist, { rpc }), reader, { sealed, k: 2, intervalS: 3600, graceS: 3600, mode: "public", listed: true, vaultDays: 30, custodians: cs.map((c, i) => ({ address: c.address, pubkey: pubs[i] })) });
 const w = walletClient(activist, { rpc });
 const beat = (duress: boolean) => ({ vaultId: sealed.vaultId, payload: beatPayload(sealed.vaultId, pubs, duress) });
 

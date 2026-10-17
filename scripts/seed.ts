@@ -39,7 +39,7 @@ async function seedVault(name: string, slot: number, doc: keyof typeof DEMO_DOCS
   const d = DEMO_DOCS[doc];
   const sealed = sealVault({ title: d.title, note: d.note, files: d.files, k: 2, custodianPubKeys: custodians.map((c) => pub(c.secret)) });
   const res = await createVault(walletClient(activist, { rpc }), reader, {
-    sealed, k: 2, intervalS, graceS, mode: "public", tag: name,
+    sealed, k: 2, intervalS, graceS, mode: "public", listed: true,
     custodians: custodians.map((c) => ({ address: c.address, pubkey: bytesToHex(pub(c.secret)) })),
   }, (p) => p.txHash && console.log(`  ${name} ${p.stage} ${p.done}/${p.total} ${p.txHash}`));
   for (const [i, c] of custodians.entries()) {

@@ -36,9 +36,10 @@ export function watchVault(
   });
   let timer: ReturnType<typeof setTimeout> | undefined;
   if (p.lapseInBlocks !== null) {
-    const ms = Number(p.lapseInBlocks) * BLOCK_SECONDS * 1000 + 1500;
-    // setTimeout overflows past ~24.8 days; a page open that long re-arms on its next reload
-    if (ms < 2 ** 31 - 1) timer = setTimeout(() => onSignal({ kind: "deadline" }), ms);
+    // setTimeout cannot wait longer than 2^31-1 ms (about 24.8 days). For a monthly rhythm the timer fires early,
+    // the caller re-reads, finds the heartbeat still alive, and arms a new timer from the fresh expiry.
+    const ms = Math.min(Number(p.lapseInBlocks) * BLOCK_SECONDS * 1000 + 1500, 2 ** 31 - 1);
+    timer = setTimeout(() => onSignal({ kind: "deadline" }), ms);
   }
   return () => {
     unwatch();

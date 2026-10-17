@@ -49948,15 +49948,15 @@ var LIFETIME = {
   minVaultDays: 30,
   defaultVaultDays: 365
 };
-var base = (kind, vaultId) => ({
-  project: str(PROJECT),
+var base = (kind, vaultId, listed = true) => ({
+  ...listed ? { project: str(PROJECT) } : {},
   v: i32(SCHEMA_VERSION),
   type: str(kind),
   vault_id: bytes32(vaultId)
 });
 var attrs = {
   vault: (p) => ({
-    ...base("vault", p.vaultId),
+    ...base("vault", p.vaultId, p.listed),
     k: i32(p.k),
     n: i32(p.n),
     mode: str(p.mode),
@@ -49965,17 +49965,17 @@ var attrs = {
     chunks: i32(p.chunks),
     sealed_at_ms: u64(BigInt(p.sealedAtMs))
   }),
-  chunk: (vaultId, idx) => ({ ...base("chunk", vaultId), idx: i32(idx) }),
-  envelope: (vaultId, slot, custodian) => ({ ...base("envelope", vaultId), slot: i32(slot), custodian: addr(custodian) }),
-  heartbeat: (vaultId, intervalS, graceS) => ({
-    ...base("heartbeat", vaultId),
+  chunk: (vaultId, idx, listed = true) => ({ ...base("chunk", vaultId, listed), idx: i32(idx) }),
+  envelope: (vaultId, slot, custodian, listed = true) => ({ ...base("envelope", vaultId, listed), slot: i32(slot), custodian: addr(custodian) }),
+  heartbeat: (vaultId, intervalS, graceS, listed = true) => ({
+    ...base("heartbeat", vaultId, listed),
     interval_s: u64(BigInt(intervalS)),
     grace_s: u64(BigInt(graceS))
   }),
-  ack: (vaultId, slot) => ({ ...base("ack", vaultId), slot: i32(slot) }),
+  ack: (vaultId, slot, listed = true) => ({ ...base("ack", vaultId, listed), slot: i32(slot) }),
   /** One per check-in. Its payload carries an encrypted ok/duress flag for each custodian. */
-  beat: (vaultId) => base("beat", vaultId),
-  release: (vaultId, slot) => ({ ...base("release", vaultId), slot: i32(slot) })
+  beat: (vaultId, listed = true) => base("beat", vaultId, listed),
+  release: (vaultId, slot, listed = true) => ({ ...base("release", vaultId, listed), slot: i32(slot) })
 };
 var ReleaseMode = external_exports.enum(["public", "newsroom"]);
 var hex3 = external_exports.string().regex(/^0x[0-9a-fA-F]*$/);
@@ -49993,11 +49993,14 @@ var Manifest = external_exports.object({
   grace_s: external_exports.number().int().positive(),
   release: external_exports.object({ mode: ReleaseMode, newsroom_pubkey: hex3.optional() }),
   sealed_at_ms: external_exports.number().int(),
-  /** A short public tag the activist picks so custodians can tell vaults apart. Never a name. */
-  tag: external_exports.string().max(24)
+  /** Whether the vault appears in the public directory. Absent on early demo vaults, which were all listed. */
+  listed: external_exports.boolean().optional(),
+  /** Only on early demo vaults. New vaults write no free text in public. */
+  tag: external_exports.string().max(24).optional()
 }).refine((m) => m.n === m.custodians.length && m.k <= m.n && m.commitments.length === m.n && m.chunks.hashes.length === m.chunks.count, {
   message: "manifest counts do not agree"
 });
+var isListed = (m) => m.listed !== false;
 var ReleasePayload = external_exports.object({
   v: external_exports.literal(1),
   slot: external_exports.number().int().min(1),
@@ -51549,7 +51552,7 @@ async function ackCustody(wallet, p) {
   return wallet.createEntity({
     payload: new Uint8Array(),
     contentType: BIN,
-    attributes: attrs.ack(p.vaultId, p.slot),
+    attributes: attrs.ack(p.vaultId, p.slot, p.listed ?? true),
     expires,
     flags: { readonly: true, permissionlessExtension: false }
   });
@@ -51559,7 +51562,7 @@ async function publishRelease(wallet, reader2, p) {
     {
       payload: jsonToPayload(p.payload),
       contentType: JSON_T,
-      attributes: attrs.release(p.vaultId, p.payload.slot),
+      attributes: attrs.release(p.vaultId, p.payload.slot, p.listed ?? true),
       expires: ExpirationTime.fromDays(p.vaultDays ?? LIFETIME.defaultVaultDays),
       flags: SEALED
     }
@@ -51574,7 +51577,7 @@ var text = (r, name) => String(r.attributes[name]?.value ?? "");
 var isSealed = (r) => r.creationFlags.readonly && same(r.owner, SEAL_ADDRESS);
 async function loadVault(client, vaultId, creator) {
   const rows = [];
-  let page = await client.select(FIELDS).where(eq("project", str(PROJECT)), eq("vault_id", bytes32(vaultId)), not(eq("type", str("chunk")))).limit(200).fetch();
+  let page = await client.select(FIELDS).where(eq("vault_id", bytes32(vaultId)), not(eq("type", str("chunk")))).limit(200).fetch();
   rows.push(...page.entities);
   while (page.hasNextPage()) {
     page = await page.next();
@@ -51672,7 +51675,7 @@ function assembleVault(rows, vaultId, creator, head) {
 }
 async function loadCiphertext(client, view) {
   const rows = [];
-  let page = await client.select(FIELDS).where(eq("project", str(PROJECT)), eq("vault_id", bytes32(view.vaultId)), eq("type", str("chunk"))).createdBy(view.creator).limit(50).fetch();
+  let page = await client.select(FIELDS).where(eq("vault_id", bytes32(view.vaultId)), eq("type", str("chunk"))).createdBy(view.creator).limit(50).fetch();
   rows.push(...page.entities);
   while (page.hasNextPage()) {
     page = await page.next();
@@ -51687,10 +51690,17 @@ async function loadCiphertext(client, view) {
   return { ciphertext, keys: ordered.map((r) => ({ key: r.key, expiresAt: r.expiresAt })) };
 }
 async function listVaults(client, opts = {}) {
-  const q = (type) => {
-    let b = client.select({ key: true, creator: true, createdAt: true, expiresAt: true, attributes: true }).where(eq("project", str(PROJECT)), eq("type", str(type)));
+  const q = async (type) => {
+    const where = opts.creator ? [eq("type", str(type))] : [eq("project", str(PROJECT)), eq("type", str(type))];
+    let b = client.select({ key: true, creator: true, createdAt: true, expiresAt: true, attributes: true }).where(...where);
     if (opts.creator) b = b.createdBy(opts.creator);
-    return b.limit(opts.limit ?? 200).fetch();
+    let page = await b.limit(opts.limit ?? 200).fetch();
+    const entities = [...page.entities];
+    while (page.hasNextPage() && entities.length < 2e3) {
+      page = await page.next();
+      entities.push(...page.entities);
+    }
+    return { entities, blockNumber: page.blockNumber };
   };
   const [vaults, beats, releases] = await Promise.all([q("vault"), q("heartbeat"), q("release")]);
   const beatOf = /* @__PURE__ */ new Map();
@@ -51737,8 +51747,8 @@ function watchVault(ws2, p, onSignal, onError = () => {
   });
   let timer;
   if (p.lapseInBlocks !== null) {
-    const ms = Number(p.lapseInBlocks) * BLOCK_SECONDS * 1e3 + 1500;
-    if (ms < 2 ** 31 - 1) timer = setTimeout(() => onSignal({ kind: "deadline" }), ms);
+    const ms = Math.min(Number(p.lapseInBlocks) * BLOCK_SECONDS * 1e3 + 1500, 2 ** 31 - 1);
+    timer = setTimeout(() => onSignal({ kind: "deadline" }), ms);
   }
   return () => {
     unwatch();
@@ -51768,6 +51778,7 @@ async function releaseMyShare(wallet, reader2, view, secret) {
   const body = toNewsroom ? encryptTo(hexToBytes2(view.manifest.release.newsroom_pubkey), share) : share;
   return publishRelease(wallet, reader2, {
     vaultId: view.vaultId,
+    listed: isListed(view.manifest),
     payload: { v: 1, slot: seat.slot, share: bytesToHex2(body), sealed_to_newsroom: toNewsroom, observed_lapse_block: view.head.toString() }
   });
 }

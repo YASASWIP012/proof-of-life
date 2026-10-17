@@ -12,16 +12,16 @@ Every entity carries these four attributes:
 
 | Attribute | Type | Value |
 |---|---|---|
-| `project` | `str` | `proof-of-life` |
+| `project` | `str` | `proof-of-life`, **only on listed vaults**. Unlisted vaults (the default) omit it, so nobody can enumerate them through our directory query; they are found by `vault_id`, which only link holders know |
 | `v` | `i32` | `1` (schema version) |
-| `type` | `str` | one of `vault`, `chunk`, `envelope`, `heartbeat`, `ack`, `release` |
+| `type` | `str` | one of `vault`, `chunk`, `envelope`, `heartbeat`, `beat`, `ack`, `release` |
 | `vault_id` | `bytes32` | random 32 bytes chosen in the activist's browser; links every entity of one vault |
 
 `vault_id` is a link, not a credential. Anyone can write an entity with any `vault_id`. Trust comes only from `$creator`, as the trust rules below say.
 
 | Type | Written by | Extra attributes | Payload | Flags | Owner after the write | Lifetime |
 |---|---|---|---|---|---|---|
-| `chunk` | activist | `idx` `i32` | ≤ 96 KiB of AES-256-GCM ciphertext | readonly, permissionlessExtension | `0x…dEaD` | vault term (default 365 days, min 30); anyone can extend |
+| `chunk` | activist | `idx` `i32` | ≤ 96 KiB of AES-256-GCM ciphertext | readonly, permissionlessExtension (the activist can turn this off) | `0x…dEaD` | vault term (default 365 days, min 30); anyone can extend |
 | `vault` (manifest) | activist | `k` `i32`, `n` `i32`, `mode` `str`, `interval_s` `u64`, `grace_s` `u64`, `chunks` `i32`, `sealed_at_ms` `u64` | JSON manifest (below) | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
 | `envelope` | activist | `slot` `i32`, `custodian` `addr` | one key share, ECIES-encrypted to that custodian's key | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
 | `heartbeat` | activist | `interval_s` `u64`, `grace_s` `u64` | empty | readonly, **not** permissionless | activist | `interval_s + grace_s`, reset by every check-in |
@@ -53,11 +53,11 @@ Every entity carries these four attributes:
   "interval_s": 604800, "grace_s": 259200,
   "release": { "mode": "public" },  // or { "mode": "newsroom", "newsroom_pubkey": "0x02…" }
   "sealed_at_ms": 1760700000000,
-  "tag": "short public label, never a name"
+  "listed": false                    // shown in the public directory or not
 }
 ```
 
-Nothing in the manifest identifies the activist, the custodians or the documents. Titles, notes and file names live inside the ciphertext.
+Nothing in the manifest identifies the activist, the custodians or the documents, and it holds no free text at all. Titles, notes, file names and any label the activist uses live inside the ciphertext. (The three demo vaults seeded on 17 October carry a short `tag`; new vaults never write one.)
 
 ## Release payload (`release`, `application/json`)
 
@@ -81,10 +81,11 @@ Readers (web app, CLI, any third party) apply these rules. Anything that fails i
 
 | Question | Query | Where |
 |---|---|---|
-| Everything about one vault except ciphertext (one request per page view) | `project = str('proof-of-life') AND vault_id = bytes32(V) AND NOT (type = str('chunk'))` | `loadVault` in [`reads.ts`](../packages/core/src/arkiv/reads.ts) |
-| The ciphertext, only from the vault's creator, paginated with a cursor | `project = … AND vault_id = bytes32(V) AND type = str('chunk')` + `.createdBy(C)` | `loadCiphertext` |
-| Every vault in the directory | `project = … AND type = str('vault')`, plus the same for `heartbeat` and `release` | `listVaults` |
-| Envelopes addressed to one custodian key | `project = … AND type = str('envelope') AND custodian = addr(A)` | `envelopesFor` |
+| Everything about one vault except ciphertext (one request per page view) | `vault_id = bytes32(V) AND NOT (type = str('chunk'))` | `loadVault` in [`reads.ts`](../packages/core/src/arkiv/reads.ts) |
+| The ciphertext, only from the vault's creator, paginated with a cursor | `vault_id = bytes32(V) AND type = str('chunk')` + `.createdBy(C)` | `loadCiphertext` |
+| Listed vaults for the directory, every page walked with the cursor | `project = str('proof-of-life') AND type = str('vault')`, plus the same for `heartbeat` and `release` |
+| One activist key's own vaults, listed or not (check-in page) | `type = str('vault')` + `.createdBy(key)` | `listVaults` |
+| Envelopes addressed to one custodian key | `type = str('envelope') AND custodian = addr(A)` | `envelopesFor` |
 | Is this heartbeat alive? | `… AND type = str('heartbeat') AND $creator = addr(C)` and compare `$expiresAt` with the head | vault page "Check this without us" panel |
 
 Arkiv has no server-side ordering, so chunks are ordered by their `idx` attribute and releases by `$createdAt` on the client.

@@ -42,7 +42,8 @@ function Form({ account }: { account: OpenKey["account"] }) {
   const [rhythm, setRhythm] = useState<(typeof RHYTHMS)[number]["id"]>("weekly");
   const [mode, setMode] = useState<"public" | "newsroom">("newsroom");
   const [newsroom, setNewsroom] = useState("");
-  const [tag, setTag] = useState("");
+  const [listed, setListed] = useState(false);
+  const [anyoneKeeps, setAnyoneKeeps] = useState(true);
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<{ text: string; tx?: string }[]>([]);
@@ -61,7 +62,7 @@ function Form({ account }: { account: OpenKey["account"] }) {
   const custodians = parsed.filter((p): p is { address: Hex; pubkey: Hex } => !!p && !(p instanceof Error));
   const dup = new Set(custodians.map((c) => c.address.toLowerCase())).size !== custodians.length;
   const r = RHYTHMS.find((x) => x.id === rhythm)!;
-  const ready = files.length > 0 && total <= MAX_BUNDLE_BYTES * 0.7 && custodians.length >= 2 && !dup && k >= 2 && k <= custodians.length && agree && (mode === "public" || /^0x0[23][0-9a-fA-F]{64}$/.test(newsroom)) && !/\s{2,}/.test(tag);
+  const ready = files.length > 0 && total <= MAX_BUNDLE_BYTES * 0.7 && custodians.length >= 2 && !dup && k >= 2 && k <= custodians.length && agree && (mode === "public" || /^0x0[23][0-9a-fA-F]{64}$/.test(newsroom));
 
   const seal = async () => {
     setBusy(true);
@@ -77,7 +78,7 @@ function Form({ account }: { account: OpenKey["account"] }) {
       await ensureGas(account.address, BigInt(sealed.chunks.length + 2) * 4_000_000_000_000_000n);
       const res = await createVault(walletClient(account), readClient(), {
         sealed, k, custodians, intervalS: r.interval, graceS: r.grace, mode,
-        newsroomPubkey: mode === "newsroom" ? (newsroom as Hex) : undefined, tag: tag.trim().slice(0, 24),
+        newsroomPubkey: mode === "newsroom" ? (newsroom as Hex) : undefined, listed, keepAliveByAnyone: anyoneKeeps,
       }, (p) => p.txHash && setLog((l) => [...l, { text: p.stage === "chunks" ? `Chunk ${p.done}/${p.total} sealed` : "Manifest, envelopes and heartbeat sealed together", tx: p.txHash }]));
       setDone({ manifest: res.manifest, vaultId: sealed.vaultId });
     } catch (e) {
@@ -152,9 +153,16 @@ function Form({ account }: { account: OpenKey["account"] }) {
             <label className="text-sm"><input type="radio" className="mr-2" checked={mode === "newsroom"} onChange={() => setMode("newsroom")} /> Release to one newsroom. Pieces are sealed to its key; its editors check the documents before anything is published.</label>
             {mode === "newsroom" && <input className={`${inputCls} font-mono text-xs`} placeholder="Newsroom public key, 0x02… or 0x03…" value={newsroom} onChange={(e) => setNewsroom(e.target.value.trim())} />}
           </div>
-          <Field label="Public tag (optional)" hint="Shown on the vault page so your custodians can tell vaults apart. Never a name or place.">
-            <input className={inputCls} value={tag} maxLength={24} onChange={(e) => setTag(e.target.value)} />
-          </Field>
+          <div className="mt-4 space-y-3">
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <span><b>Let anyone keep the evidence alive</b><br /><span className="text-muted">Recommended. After a release, supporters can extend the encrypted data so it outlives you. Turn off to keep its lifetime in your hands alone.</span></span>
+              <input type="checkbox" className="switch mt-1" checked={anyoneKeeps} onChange={(e) => setAnyoneKeeps(e.target.checked)} />
+            </label>
+            <label className="flex items-start justify-between gap-4 text-sm">
+              <span><b>List this vault in the public directory</b><br /><span className="text-muted">Off by default. An unlisted vault carries no project tag, so only people with its link can find it.</span></span>
+              <input type="checkbox" className="switch mt-1" checked={listed} onChange={(e) => setListed(e.target.checked)} />
+            </label>
+          </div>
         </Card>
       </div>
 
@@ -167,7 +175,7 @@ function Form({ account }: { account: OpenKey["account"] }) {
               <tr><td className="py-1 pr-2">Encrypted chunks and their hashes</td><td>The files, the title, the note</td></tr>
               <tr><td className="py-1 pr-2">Each custodian's one-time address and public key</td><td>Who the custodians are</td></tr>
               <tr><td className="py-1 pr-2">Your heartbeat and its deadline</td><td>Your key and passphrase</td></tr>
-              <tr><td className="py-1 pr-2">{k} of {custodians.length || "n"}, rhythm, release mode, tag</td><td>Anything that names you</td></tr>
+              <tr><td className="py-1 pr-2">{k} of {custodians.length || "n"}, rhythm, release mode</td><td>Anything that names you, and any label you give the vault</td></tr>
             </tbody>
           </table>
           <p className="mt-3 text-xs text-muted">Someone watching the chain can see when you check in, and the Arkiv node sees the IP address you check in from. Check in at times you would be online anyway, over Tor or a VPN you already use.</p>

@@ -42,7 +42,7 @@ step(`sealed locally: ${sealed.chunks.length} chunks`);
 const chunksPerTx = Number(process.env.CHUNKS_PER_TX ?? 2);
 const txs: Hex[] = [];
 const res = await createVault(walletClient(activist, { rpc }), reader, {
-  sealed, k: 2, intervalS: 40, graceS: 20, mode: "public", tag: `e2e-${run}`, vaultDays: 30, chunksPerTx,
+  sealed, k: 2, intervalS: 40, graceS: 20, mode: "public", listed: process.env.LISTED !== "0", vaultDays: 30, chunksPerTx,
   custodians: cs.map((c) => ({ address: c.address, pubkey: bytesToHex(pub(c.secret)) })),
 }, (p) => {
   if (p.txHash) txs.push(p.txHash);
