@@ -1,5 +1,5 @@
 // For the people an activist trusts: make a one-vault key, confirm custody, and release when the heartbeat stops.
-import { ackCustody, envelopesFor, loadVault, releaseMyShare, walletClient, type VaultView } from "@proof-of-life/core";
+import { ackCustody, duressSignal, envelopesFor, loadVault, releaseMyShare, walletClient, type VaultView } from "@proof-of-life/core";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { KeyGate, useBlobCount } from "../components/KeyGate";
@@ -82,7 +82,8 @@ function Seat({ account, openKey }: { account: OpenKey["account"]; openKey: Open
           const seat = v.manifest.custodians.find((c) => c.address.toLowerCase() === account.address.toLowerCase())!;
           const ack = v.acks.find((a) => a.slot === seat.slot);
           const mine = v.releases.find((r) => r.slot === seat.slot && r.valid);
-          const canRelease = (v.status.phase === "lapsed" || v.status.phase === "releasing") && !mine;
+          const duress = duressSignal(v, seat.slot, account.secret) === "duress";
+          const canRelease = (v.status.phase === "lapsed" || v.status.phase === "releasing" || duress) && !mine;
           return (
             <Card key={v.vaultId}>
               <div className="flex items-center justify-between gap-2">
@@ -90,6 +91,7 @@ function Seat({ account, openKey }: { account: OpenKey["account"]; openKey: Open
                 <PhaseBadge phase={v.status.phase} />
               </div>
               <p className="mt-2 text-sm text-muted">Slot {seat.slot} of {v.manifest.n} · {v.manifest.k} needed to release</p>
+              {duress && <div className="mt-3"><Notice tone="danger">The activist's last check-in used their duress passphrase. Only you and the other custodians can see this. Publish your piece now.</Notice></div>}
               {v.status.phase === "overdue" && <div className="mt-3"><Notice tone="warn">The activist is late. Try to reach them now, through the channel you agreed on.</Notice></div>}
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button variant="ghost" disabled={busy} onClick={() => act(() => ackCustody(walletClient(account), { vaultId: v.vaultId, slot: seat.slot, existingKey: ack?.key }), ack ? "Custody renewed for 14 days." : "Custody confirmed.")}>

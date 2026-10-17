@@ -26,6 +26,11 @@ export type Status = {
 
 export function vaultStatus(i: StatusInput): Status {
   const releasesNeeded = Math.max(0, i.k - i.validReleases);
+  // Enough valid pieces open the vault whatever the heartbeat says (after a duress signal it still beats).
+  if (releasesNeeded === 0) {
+    const beating = i.heartbeatExpiresAt !== null && i.heartbeatExpiresAt > i.head;
+    return { phase: "released", dueAt: null, blocksToDue: null, blocksToLapse: null, releasesNeeded, earlyRelease: beating };
+  }
   if (i.heartbeatExpiresAt === null || i.heartbeatExpiresAt <= i.head) {
     const phase: Phase = releasesNeeded === 0 ? "released" : i.validReleases > 0 ? "releasing" : "lapsed";
     return { phase, dueAt: null, blocksToDue: null, blocksToLapse: null, releasesNeeded, earlyRelease: false };

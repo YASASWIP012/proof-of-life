@@ -30,7 +30,7 @@ Today an activist's protection is a folder on a laptop, a copy with a friend, or
 
 - **The evidence cannot be destroyed.** Files are encrypted in the activist's browser and written to Arkiv. Every encrypted piece is read-only and handed, in the same transaction, to an address nobody holds. Not the activist under duress, not us under a court order, not anyone can delete it.
 - **Silencing the activist releases the evidence.** The activist checks in on a rhythm they choose (weekly, fortnightly, monthly). If they stop, the heartbeat disappears from Arkiv at its deadline, and their custodians publish their pieces of the key. Once enough are public, anyone's browser can open the documents. Killing the activist no longer buries the findings, which removes the reason to kill.
-- **A forced check-in can still raise the alarm.** An activist can set a duress passphrase. Checking in with it looks normal on screen and stops the heartbeat at once.
+- **A forced check-in can still raise the alarm.** An activist can set a duress passphrase. Every check-in carries a small note encrypted to the custodians, saying "ok" or "duress". A duress check-in looks identical on screen, on the public vault page and on the chain, and tells the custodians to release now.
 - **No single person can betray them.** The key is split among custodians (a journalist, a lawyer, a friend), and any `k` of them together can open the vault. Fewer learn nothing. One unreachable custodian does not block the release.
 - **Editors can check before anything is published.** In newsroom mode the pieces are sealed to one newsroom's key, so its editors read the documents first and decide what to publish.
 - **It works for them today.** A phone browser, no wallet to install, no crypto to buy, in English, हिन्दी and తెలుగు.
@@ -91,7 +91,7 @@ The product falls apart without three Arkiv properties:
 | a custodian publishes a wrong piece | ignored: it fails the slot's public commitment |
 | a custodian publishes early | the app and CLI refuse; if done anyway, the vault page shows a red **early release** warning, and fewer than `k` pieces still reveal nothing |
 | one custodian is unreachable | `k`-of-`n`: the others are enough |
-| someone forces the activist to check in | with the duress passphrase the screen says "checked in" and the heartbeat is deleted instead |
+| someone forces the activist to check in | the duress passphrase makes a check-in that is identical on chain; only the custodians can read that it means "release now" |
 | someone takes the activist's phone | they find opaque encrypted blobs: no address, role, label or vault list without the passphrase (vaults are found on Arkiv by key, never stored on the phone) |
 | our website disappears | the CLI, the curl recipe and any other reader built from [`schema.md`](arkiv/schema.md) still work |
 | someone watches the chain | they see random ids, ciphertext and check-in times, not names, titles or links between vaults. Check-in timing remains visible; the app says so before sealing |

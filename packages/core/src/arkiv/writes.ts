@@ -119,18 +119,24 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
 /**
  * One tap: the heartbeat gets a fresh interval + grace. Sealed entities that would expire within the next
  * month are carried forward in the same transaction, so a living activist's vault never ages out.
+ * With `beat`, the same batch also writes the check-in's encrypted ok/duress note for the custodians
+ * (see crypto/duress.ts). A normal and a forced check-in produce the same transaction shape.
  */
 export async function checkIn(
   wallet: WalletClient,
-  p: { heartbeatKey: Hex; intervalS: number; graceS: number; sealed?: { key: Hex; expiresAt: bigint }[]; head?: bigint; vaultDays?: number },
+  p: { heartbeatKey: Hex; intervalS: number; graceS: number; sealed?: { key: Hex; expiresAt: bigint }[]; head?: bigint; vaultDays?: number; beat?: { vaultId: Hex; payload: Uint8Array } },
 ) {
   const keepDays = p.vaultDays ?? LIFETIME.defaultVaultDays;
   const soon = (p.head ?? 0n) + BigInt(30 * 43_200);
   const target = (p.head ?? 0n) + BigInt(keepDays * 43_200);
   const carry = (p.sealed ?? []).filter((e) => p.head !== undefined && e.expiresAt < soon && e.expiresAt < target);
+  const life = ExpirationTime.fromSeconds(evenSeconds(p.intervalS + p.graceS));
   return wallet.executeBatch({
+    creates: p.beat
+      ? [{ payload: p.beat.payload, contentType: BIN, attributes: attrs.beat(p.beat.vaultId), expires: life, flags: { readonly: true, permissionlessExtension: false } }]
+      : undefined,
     extensions: [
-      { entityKey: p.heartbeatKey, expires: ExpirationTime.fromSeconds(evenSeconds(p.intervalS + p.graceS)) },
+      { entityKey: p.heartbeatKey, expires: life },
       ...carry.map((e) => ({ entityKey: e.key, expires: ExpirationTime.fromDays(keepDays) })),
     ],
   });

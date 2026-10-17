@@ -47,7 +47,7 @@ export const en = {
   t_due_in: "Check-in due in",
   t_lapses_in: "Stops beating in",
   t_ago: "ago",
-  early_release: "Warning: a custodian published a piece while the heartbeat was still alive. That breaks the custodian rules. Readers should treat this vault as compromised.",
+  early_release: "Pieces were published while the heartbeat still beats. Either the activist sent a duress signal that only custodians can read, or custodians broke the rules.",
 
   v_custodians: "Custodians",
   v_custodian_slot: "Slot {slot}",
@@ -132,7 +132,7 @@ export const en = {
   faq_2_q: "What if I lose my phone?",
   faq_2_a: "Restore your backup file on a new phone and enter your passphrase. Keep the backup away from the phone, for example with someone you trust. Without the passphrase it is random text.",
   faq_3_q: "What if someone forces me to check in?",
-  faq_3_a: "Set a duress passphrase when you create the vault. Checking in with it looks normal on screen, but it stops the heartbeat at once.",
+  faq_3_a: "Set a duress passphrase when you create the vault. A check-in with it looks exactly like a normal one, on your screen and on the public vault page. Inside, each check-in carries a note encrypted to your custodians, and this one tells them to release now.",
   faq_4_q: "Can a custodian read my documents early?",
   faq_4_a: "One piece reveals nothing. Pieces published while the heartbeat still beats are flagged on the vault page as an early release, and fewer than k pieces still open nothing.",
   faq_5_q: "What does someone watching the chain see?",

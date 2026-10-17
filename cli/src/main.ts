@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
-  ackCustody, listVaults, loadCiphertext, loadVault, releaseMyShare, socketClient, publicClient, unsealVault, unwrapKey,
+  ackCustody, duressSignal, listVaults, loadCiphertext, loadVault, releaseMyShare, socketClient, publicClient, unsealVault, unwrapKey,
   vaultStatus, walletClient, watchVault, BLOCK_SECONDS, type VaultView, type WrappedKey,
 } from "@proof-of-life/core";
 import { privateKeyToAccount } from "viem/accounts";
@@ -120,7 +120,10 @@ async function main() {
           v = await loadVault(reader, vaultId, creator);
           log(`${new Date().toISOString()} phase ${v.status.phase}`);
           if (v.status.phase === "overdue") log("OVERDUE: try to reach the activist now.");
-          if (key && auto && (v.status.phase === "lapsed" || v.status.phase === "releasing")) {
+          const seat = key && v.manifest.custodians.find((c) => c.address.toLowerCase() === key.account.address.toLowerCase());
+          const duress = !!(seat && key && duressSignal(v, seat.slot, key.secret) === "duress");
+          if (duress) log("DURESS: the activist's last check-in used the duress passphrase.");
+          if (key && auto && (v.status.phase === "lapsed" || v.status.phase === "releasing" || duress)) {
             try {
               const r = await releaseMyShare(walletClient(key.account, { rpc }), reader, v, key.secret);
               log(`released my piece: ${r.txHash}`);

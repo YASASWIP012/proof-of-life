@@ -15,7 +15,7 @@ import { newSecret } from "../lib/keys";
 import { read, readClient } from "../lib/net";
 import { syntheticRtiReply } from "../lib/synthetic";
 import { ensureGas } from "../lib/tap";
-import { attrs, checkIn, hexToBytes, vaultStatus } from "@proof-of-life/core";
+import { attrs, beatPayload, checkIn, hexToBytes, vaultStatus } from "@proof-of-life/core";
 import { ExpirationTime, jsonToPayload } from "@arkiv-network/sdk";
 
 type Actor = ReturnType<typeof newSecret> & { name: string; wallet: WalletClient };
@@ -108,7 +108,8 @@ export default function Drill() {
     const v = vaultRef.current!;
     setBusy(true);
     try {
-      const r = await checkIn(a.activist.wallet, { heartbeatKey: v.heartbeatKey, intervalS: INTERVAL, graceS: GRACE });
+      const beat = { vaultId: v.vaultId, payload: beatPayload(v.vaultId, a.custodians.map((c) => c.pubkey), false) };
+      const r = await checkIn(a.activist.wallet, { heartbeatKey: v.heartbeatKey, intervalS: INTERVAL, graceS: GRACE, beat });
       add({ text: "Activist checked in", tx: r.txHash, tone: "ok" });
       await refresh();
     } catch (e) {

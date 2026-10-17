@@ -14646,15 +14646,15 @@ var gcm = /* @__PURE__ */ wrapCipher({ blockSize: 16, nonceLength: 12, tagLength
 var NONCE = 12;
 var DecryptError = class extends Error {
 };
-function seal(key2, plaintext, aad) {
+function seal(key2, plaintext, aad2) {
   if (key2.length !== 32) throw new RangeError("AES-256 needs a 32-byte key");
   const nonce = randomBytes2(NONCE);
-  return concat(nonce, gcm(key2, nonce, aad).encrypt(plaintext));
+  return concat(nonce, gcm(key2, nonce, aad2).encrypt(plaintext));
 }
-function open(key2, sealed, aad) {
+function open(key2, sealed, aad2) {
   if (sealed.length < NONCE + 16) throw new DecryptError("ciphertext too short");
   try {
-    return gcm(key2, sealed.subarray(0, NONCE), aad).decrypt(sealed.subarray(NONCE));
+    return gcm(key2, sealed.subarray(0, NONCE), aad2).decrypt(sealed.subarray(NONCE));
   } catch {
     throw new DecryptError("wrong key or tampered ciphertext");
   }
@@ -17132,19 +17132,19 @@ function deriveKey(shared, ephPub, recipientPub) {
 function compressPublicKey(pub) {
   return secp256k1.Point.fromBytes(pub).toBytes(true);
 }
-function encryptTo(recipientPub, plaintext, aad) {
+function encryptTo(recipientPub, plaintext, aad2) {
   const recipient = compressPublicKey(recipientPub);
   const eph = secp256k1.utils.randomSecretKey();
   const ephPub = secp256k1.getPublicKey(eph, true);
   const key2 = deriveKey(secp256k1.getSharedSecret(eph, recipient, true), ephPub, recipient);
   eph.fill(0);
-  return concat(ephPub, seal(key2, plaintext, aad));
+  return concat(ephPub, seal(key2, plaintext, aad2));
 }
-function decryptWith(secretKey, envelope, aad) {
+function decryptWith(secretKey, envelope, aad2) {
   const ephPub = envelope.subarray(0, PUB);
   const recipient = secp256k1.getPublicKey(secretKey, true);
   const key2 = deriveKey(secp256k1.getSharedSecret(secretKey, ephPub, true), ephPub, recipient);
-  return open(key2, envelope.subarray(PUB), aad);
+  return open(key2, envelope.subarray(PUB), aad2);
 }
 
 // ../node_modules/@noble/hashes/pbkdf2.js
@@ -17391,6 +17391,7 @@ async function unwrapKey(w, passphrase) {
   const key2 = await kek(passphrase, fromBase64(w.salt), w.n, w.r, w.p);
   return open(key2, fromBase64(w.data), utf8(w.address));
 }
+var BLOB_AAD = utf8("proof-of-life/keystore/v2");
 
 // ../packages/core/src/crypto/vault.ts
 var CHUNK_BYTES = 96 * 1024;
@@ -17434,6 +17435,23 @@ function unsealVault(vaultId, ciphertext, shares) {
   const files = bundle.files.map((f) => ({ name: f.name, type: f.type, bytes: fromBase64(f.data) }));
   const verified = files.every((f, i) => sha256Hex(f.bytes) === bundle.files[i].sha256);
   return { bundle, files, verified };
+}
+
+// ../packages/core/src/crypto/duress.ts
+var OK = 0;
+var DURESS = 213;
+var PLAIN = 16;
+var BEAT_SLOT_BYTES = 33 + 12 + PLAIN + 16;
+var aad = (vaultId, slot) => concat(utf8("proof-of-life/beat/v1"), hexToBytes2(vaultId), new Uint8Array([slot]));
+function readBeat(vaultId, payload, slot, custodianSecret) {
+  const start = (slot - 1) * BEAT_SLOT_BYTES;
+  if (payload.length < start + BEAT_SLOT_BYTES) return null;
+  try {
+    const plain = decryptWith(custodianSecret, payload.subarray(start, start + BEAT_SLOT_BYTES), aad(vaultId, slot));
+    return plain[0] === DURESS ? "duress" : plain[0] === OK ? "ok" : null;
+  } catch {
+    return null;
+  }
 }
 
 // ../node_modules/viem/_esm/index.js
@@ -49955,6 +49973,8 @@ var attrs = {
     grace_s: u64(BigInt(graceS))
   }),
   ack: (vaultId, slot) => ({ ...base("ack", vaultId), slot: i32(slot) }),
+  /** One per check-in. Its payload carries an encrypted ok/duress flag for each custodian. */
+  beat: (vaultId) => base("beat", vaultId),
   release: (vaultId, slot) => ({ ...base("release", vaultId), slot: i32(slot) })
 };
 var ReleaseMode = external_exports.enum(["public", "newsroom"]);
@@ -49991,6 +50011,10 @@ var secondsToBlocks = (s) => BigInt(Math.ceil(s / BLOCK_SECONDS));
 // ../packages/core/src/arkiv/status.ts
 function vaultStatus(i) {
   const releasesNeeded = Math.max(0, i.k - i.validReleases);
+  if (releasesNeeded === 0) {
+    const beating = i.heartbeatExpiresAt !== null && i.heartbeatExpiresAt > i.head;
+    return { phase: "released", dueAt: null, blocksToDue: null, blocksToLapse: null, releasesNeeded, earlyRelease: beating };
+  }
   if (i.heartbeatExpiresAt === null || i.heartbeatExpiresAt <= i.head) {
     const phase = releasesNeeded === 0 ? "released" : i.validReleases > 0 ? "releasing" : "lapsed";
     return { phase, dueAt: null, blocksToDue: null, blocksToLapse: null, releasesNeeded, earlyRelease: false };
@@ -51580,6 +51604,11 @@ function assembleVault(rows, vaultId, creator, head) {
     return true;
   });
   const hb = heartbeats.sort((a, b) => Number(b.expiresAt - a.expiresAt))[0] ?? null;
+  const beats = byType("beat").filter((r) => {
+    if (!same(r.creator, creator)) return reject(r, "check-in note not written by the vault's creator"), false;
+    return true;
+  });
+  const lastBeat = beats.sort((a, b) => Number(b.createdAt - a.createdAt))[0] ?? null;
   const envelopes = byType("envelope").flatMap((r) => {
     if (!same(r.creator, creator)) return reject(r, "envelope not written by the vault's creator"), [];
     const slot = num2(r, "slot");
@@ -51632,6 +51661,7 @@ function assembleVault(rows, vaultId, creator, head) {
     expiresAt: v.expiresAt,
     sealed: isSealed(v),
     heartbeat: hb ? { key: hb.key, expiresAt: hb.expiresAt, owner: hb.owner, createdAt: hb.createdAt } : null,
+    lastBeat: lastBeat ? { key: lastBeat.key, createdAt: lastBeat.createdAt, payload: lastBeat.payload } : null,
     envelopes,
     acks,
     releases,
@@ -51722,11 +51752,14 @@ var NotYet = class extends Error {
     super(`the heartbeat is ${phase}; a custodian may only release after it stops`);
   }
 };
+function duressSignal(view, slot, secret) {
+  return view.lastBeat ? readBeat(view.vaultId, view.lastBeat.payload, slot, secret) : null;
+}
 async function releaseMyShare(wallet, reader2, view, secret) {
-  if (!mayRelease(view.status)) throw new NotYet(view.status.phase);
   const me = wallet.account.address.toLowerCase();
   const seat = view.manifest.custodians.find((c) => c.address.toLowerCase() === me);
   if (!seat) throw new Error("this key is not a custodian of this vault");
+  if (!mayRelease(view.status) && duressSignal(view, seat.slot, secret) !== "duress") throw new NotYet(view.status.phase);
   if (view.releases.some((r) => r.slot === seat.slot && r.valid)) throw new Error("this slot has already released");
   const env = view.envelopes.find((e) => e.slot === seat.slot);
   if (!env) throw new Error(`no envelope for slot ${seat.slot}`);
@@ -51986,7 +52019,10 @@ async function main() {
           v = await loadVault(reader, vaultId, creator);
           log(`${(/* @__PURE__ */ new Date()).toISOString()} phase ${v.status.phase}`);
           if (v.status.phase === "overdue") log("OVERDUE: try to reach the activist now.");
-          if (key2 && auto && (v.status.phase === "lapsed" || v.status.phase === "releasing")) {
+          const seat = key2 && v.manifest.custodians.find((c) => c.address.toLowerCase() === key2.account.address.toLowerCase());
+          const duress = !!(seat && key2 && duressSignal(v, seat.slot, key2.secret) === "duress");
+          if (duress) log("DURESS: the activist's last check-in used the duress passphrase.");
+          if (key2 && auto && (v.status.phase === "lapsed" || v.status.phase === "releasing" || duress)) {
             try {
               const r = await releaseMyShare(walletClient(key2.account, { rpc }), reader, v, key2.secret);
               log(`released my piece: ${r.txHash}`);

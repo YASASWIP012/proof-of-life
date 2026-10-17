@@ -113,3 +113,20 @@ describe("keystore v2 blobs", () => {
     await expect(openBlob(b, "another passphrase")).rejects.toThrow(DecryptError);
   }, 30_000);
 });
+
+describe("covert duress signal", () => {
+  it("looks the same either way and only each custodian can read its own flag", async () => {
+    const { beatPayload, readBeat, BEAT_SLOT_BYTES, bytesToHex } = await import("../src/crypto/index.js");
+    const cs = [custodian(), custodian(), custodian()];
+    const pubs = cs.map((c) => bytesToHex(c.pub));
+    const id = bytesToHex(randomBytes(32));
+    const ok = beatPayload(id, pubs, false);
+    const forced = beatPayload(id, pubs, true);
+    expect(ok.length).toBe(forced.length);
+    expect(ok.length).toBe(3 * BEAT_SLOT_BYTES);
+    expect(readBeat(id, ok, 2, cs[1].secret)).toBe("ok");
+    expect(readBeat(id, forced, 2, cs[1].secret)).toBe("duress");
+    expect(readBeat(id, forced, 2, cs[0].secret)).toBeNull();
+    expect(readBeat(bytesToHex(randomBytes(32)), forced, 2, cs[1].secret)).toBeNull();
+  });
+});

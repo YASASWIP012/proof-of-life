@@ -25,6 +25,7 @@ Every entity carries these four attributes:
 | `vault` (manifest) | activist | `k` `i32`, `n` `i32`, `mode` `str`, `interval_s` `u64`, `grace_s` `u64`, `chunks` `i32`, `sealed_at_ms` `u64` | JSON manifest (below) | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
 | `envelope` | activist | `slot` `i32`, `custodian` `addr` | one key share, ECIES-encrypted to that custodian's key | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
 | `heartbeat` | activist | `interval_s` `u64`, `grace_s` `u64` | empty | readonly, **not** permissionless | activist | `interval_s + grace_s`, reset by every check-in |
+| `beat` | activist | none | one encrypted ok/duress flag per custodian, fixed size (`n` × 77 bytes) | readonly | activist | `interval_s + grace_s`, one per check-in |
 | `ack` | custodian | `slot` `i32` | empty | readonly | custodian | 14 days, reset by the custodian's watcher |
 | `release` | custodian | `slot` `i32` | JSON: the share (or the share encrypted to a newsroom) | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
 
@@ -101,7 +102,7 @@ Pages and the CLI watcher subscribe with `watchEntityEvents` over a **WebSocket*
 | Action | Batch |
 |---|---|
 | Seal | N × `chunk` creates, each batch handing its chunks to `0x…dEaD`; then one batch: `vault` + n × `envelope` + `heartbeat`, with `vault` and envelopes handed to `0x…dEaD`. The vault appears whole, and its clock starts, in one block |
-| Check in | extend `heartbeat` by `interval + grace`, plus extend any sealed entity due within 30 days |
+| Check in | extend `heartbeat` by `interval + grace`, create one `beat` note, and extend any sealed entity due within 30 days |
 | Confirm custody | create `ack`, or extend the existing one by 14 days |
 | Release | create `release` and hand it to `0x…dEaD` in the same batch |
 | Keep alive | extend sealed entities (anyone) |
@@ -113,7 +114,7 @@ Pages and the CLI watcher subscribe with `watchEntityEvents` over a **WebSocket*
 | Anyone reading Arkiv | random `vault_id`s, ciphertext sizes, `k` and `n`, rhythm, the heartbeat deadline, check-in times, one-time custodian addresses, which slots released | names, titles, file names, document contents, which vaults belong to the same person (each vault is sealed by a fresh activist key) |
 | The gas tap (our Vercel function) | the fresh address it funds and the request's IP address | keys, documents, vault ids. It keeps no log of its own; the hosting platform's request logs still exist |
 | Someone holding the activist's phone | a list of passphrase-sealed blobs | addresses, roles, labels and vaults. Vaults are not stored on the phone; the app finds them on Arkiv after unlocking |
-| Someone forcing a check-in | a normal "checked in" screen | that a duress passphrase was used: its blob looks like any other, and it deletes the heartbeat instead of extending it |
+| Someone forcing a check-in | a normal check-in, on the phone, on the vault page and on chain | that the duress passphrase was used: the key blob looks like any other, and the check-in note has the same size and shape as a normal one |
 
 Check-in timing stays visible to anyone watching the chain. The app says so before sealing and suggests checking in at times the activist would be online anyway.
 

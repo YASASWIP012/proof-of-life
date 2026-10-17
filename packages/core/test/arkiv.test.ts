@@ -27,6 +27,9 @@ describe("vaultStatus", () => {
     expect(s.earlyRelease).toBe(true);
     expect(mayRelease(s)).toBe(false);
     expect(mayRelease(vaultStatus({ ...base, head: 300n, heartbeatExpiresAt: 200n }))).toBe(true);
+    const out = vaultStatus({ ...base, head: 100n, heartbeatExpiresAt: 200n, validReleases: 2 });
+    expect(out.phase).toBe("released");
+    expect(out.earlyRelease).toBe(true);
   });
 });
 

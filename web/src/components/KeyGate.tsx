@@ -130,7 +130,7 @@ export function KeyGate({ role, title, intro, forceNew = false, offerDuress = fa
               <input type="password" className={inputCls} value={pass2} onChange={(e) => setPass2(e.target.value)} autoComplete="new-password" />
             </Field>
             {offerDuress && (
-              <Field label="Duress passphrase (optional)" hint="If someone forces you to check in, use this one instead. The screen says you checked in. In fact the heartbeat stops at once and your custodians are free to release. Nothing stored on this phone shows that a duress passphrase exists.">
+              <Field label="Duress passphrase (optional)" hint="If someone forces you to check in, use this one instead. The check-in looks normal on your screen and on the public vault page. Its encrypted note tells your custodians to release now. Nothing stored on this phone shows that a duress passphrase exists.">
                 <input type="password" className={inputCls} value={duress} onChange={(e) => setDuress(e.target.value)} autoComplete="new-password" />
               </Field>
             )}

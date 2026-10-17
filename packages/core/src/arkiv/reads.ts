@@ -41,6 +41,8 @@ export type VaultView = {
   /** Readonly, and owned by an address nobody holds: neither the activist nor anyone else can delete it. */
   sealed: boolean;
   heartbeat: { key: Hex; expiresAt: bigint; owner: Hex; createdAt: bigint } | null;
+  /** The latest check-in note from the vault's creator: an encrypted ok/duress flag per custodian. */
+  lastBeat: { key: Hex; createdAt: bigint; payload: Uint8Array } | null;
   envelopes: { key: Hex; slot: number; custodian: Hex; expiresAt: bigint; sealed: boolean; payload: Uint8Array }[];
   acks: { key: Hex; slot: number; custodian: Hex; expiresAt: bigint }[];
   releases: ReleaseView[];
@@ -97,6 +99,12 @@ export function assembleVault(rows: Row[], vaultId: Hex, creator: Hex, head: big
     return true;
   });
   const hb = heartbeats.sort((a, b) => Number(b.expiresAt - a.expiresAt))[0] ?? null;
+
+  const beats = byType("beat").filter((r) => {
+    if (!same(r.creator, creator)) return reject(r, "check-in note not written by the vault's creator"), false;
+    return true;
+  });
+  const lastBeat = beats.sort((a, b) => Number(b.createdAt - a.createdAt))[0] ?? null;
 
   const envelopes = byType("envelope").flatMap((r) => {
     if (!same(r.creator, creator)) return reject(r, "envelope not written by the vault's creator"), [];
@@ -157,6 +165,7 @@ export function assembleVault(rows: Row[], vaultId: Hex, creator: Hex, head: big
     expiresAt: v.expiresAt,
     sealed: isSealed(v),
     heartbeat: hb ? { key: hb.key, expiresAt: hb.expiresAt, owner: hb.owner, createdAt: hb.createdAt } : null,
+    lastBeat: lastBeat ? { key: lastBeat.key, createdAt: lastBeat.createdAt, payload: lastBeat.payload } : null,
     envelopes,
     acks,
     releases,

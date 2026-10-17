@@ -9,7 +9,7 @@ export const SCHEMA_VERSION = 1;
 export const SEAL_ADDRESS = "0x000000000000000000000000000000000000dEaD" as const;
 export const BLOCK_SECONDS = 2;
 
-export const KINDS = ["vault", "chunk", "envelope", "heartbeat", "ack", "release"] as const;
+export const KINDS = ["vault", "chunk", "envelope", "heartbeat", "beat", "ack", "release"] as const;
 export type Kind = (typeof KINDS)[number];
 
 /** Lifetimes per entity type. Each one follows what the entity means, not a storage default. */
@@ -47,6 +47,8 @@ export const attrs = {
     grace_s: u64(BigInt(graceS)),
   }),
   ack: (vaultId: Hex, slot: number) => ({ ...base("ack", vaultId), slot: i32(slot) }),
+  /** One per check-in. Its payload carries an encrypted ok/duress flag for each custodian. */
+  beat: (vaultId: Hex) => base("beat", vaultId),
   release: (vaultId: Hex, slot: number) => ({ ...base("release", vaultId), slot: i32(slot) }),
 };
 
