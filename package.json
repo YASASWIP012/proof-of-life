@@ -1,0 +1,11 @@
+{
+  "name": "dhadkan",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "web", "cli"],
+  "scripts": {
+    "test": "npm run test -w packages/core",
+    "build": "npm run build -w web",
+    "dev": "npm run dev -w web"
+  }
+}
