@@ -1,0 +1,20 @@
+# The demo keeper: checks in for the always-alive demo vault, renews custodian leases, and releases demo
+# vaults whose heartbeat stopped. It runs here, not on the website, to show custodians need no server of ours.
+name: demo-keeper
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+concurrency: keeper
+jobs:
+  keep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx tsx scripts/keeper.ts
+        env:
+          POL_MNEMONIC: ${{ secrets.POL_MNEMONIC }}
+          ARKIV_ACCESS_KEY: ${{ secrets.ARKIV_ACCESS_KEY }}

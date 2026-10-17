@@ -72,6 +72,13 @@ export default function Home() {
         </ol>
       </section>
 
+      <section>
+        <Card>
+          <h2 className="font-serif text-xl font-bold">{t("use_title")}</h2>
+          <p className="mt-2 max-w-3xl text-sm text-muted">{t("use_body")}</p>
+        </Card>
+      </section>
+
       <section className="grid gap-4 md:grid-cols-2">
         <Card>
           <h2 className="font-serif text-xl font-bold">Why it has to be Arkiv</h2>

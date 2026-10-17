@@ -31,7 +31,7 @@ function Form({ account }: { account: Unlocked }) {
   const [invites, setInvites] = useState(["", "", ""]);
   const [k, setK] = useState(2);
   const [rhythm, setRhythm] = useState<(typeof RHYTHMS)[number]["id"]>("weekly");
-  const [mode, setMode] = useState<"public" | "newsroom">("public");
+  const [mode, setMode] = useState<"public" | "newsroom">("newsroom");
   const [newsroom, setNewsroom] = useState("");
   const [tag, setTag] = useState("");
   const [agree, setAgree] = useState(false);
@@ -163,7 +163,7 @@ function Form({ account }: { account: Unlocked }) {
             </tbody>
           </table>
           <p className="mt-3 text-xs text-muted">Someone watching the chain can see when you check in. Use the rhythm you would keep anyway, and check in from a network you would use anyway.</p>
-          <label className="mt-4 flex gap-2 text-sm"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> I understand nobody can delete this vault once sealed, me included, and that missing check-ins releases it.</label>
+          <label className="mt-4 flex gap-2 text-sm"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> I understand nobody can delete this vault once sealed, me included, and that missing check-ins releases it. These are lawfully obtained records, with no classified material and no other person's private data.</label>
           <Button className="mt-4 w-full" disabled={!ready || busy} onClick={seal}>{busy ? "Sealing…" : "Seal and start my heartbeat"}</Button>
           {err && <div className="mt-3"><Notice tone="danger">{err}</Notice></div>}
           <ol className="mt-3 space-y-1 text-xs">

@@ -68,6 +68,8 @@ export const en = {
   v_live: "Live",
   v_events: "Live activity",
 
+  use_title: "What this is for, and what it is not",
+  use_body: "Proof of Life helps people who use their legal rights, such as RTI applicants, journalists and lawyers, make sure their lawfully obtained records survive them. Seal RTI replies, public records and your own evidence. Do not seal classified material, other people's personal data, or anything you could not lawfully hold. For real use, release to a newsroom, so editors check documents before anything is published. This build runs on a test network with synthetic documents only.",
   common_loading: "Reading from Arkiv…",
   common_error: "Could not read from Arkiv",
   common_retry: "Try again",
