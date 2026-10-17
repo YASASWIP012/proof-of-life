@@ -29,15 +29,23 @@ Problems come first, then paths we tested that worked, documented with the same 
   ```
 
 - **Cost to us:** the first design split ciphertext at the documented cap and failed on the first real upload.
-- **Likely cause:** the encoded transaction (payload as hex inside ABI-encoded call data, plus attributes) crosses a transaction size limit before the payload reaches 128 KiB. We did not find the node-side number in the docs.
-- **What would fix it:** (1) the SDK checks the encoded transaction size before sending and throws a size error naming the encoded byte count and the limit; (2) the docs state the usable ceiling next to the 128 KiB figure; (3) the node answers with an oversize error instead of an empty revert.
+- **Cause, measured:** the public RPC refuses any request body over **262,144 bytes** with `HTTP 413 {"error":"BAD_REQUEST","message":"request body too large"}`. A payload travels hex-encoded inside ABI-encoded call data inside JSON, so it doubles in size on the wire. Around 125 KiB of payload, the `eth_estimateGas` request crosses 262,144 bytes, and the SDK reports the 413 as `Execution error without revert data`. Reproduce the limit with nothing but curl:
+
+  ```bash
+  pad() { python3 -c "import sys;n=int(sys.argv[1]);b='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_chainId\",\"params\":[],\"pad\":\"\"}';print(b[:-2]+'x'*(n-len(b))+'\"}',end='')" $1; }
+  pad 262144 | curl -s -w ' HTTP %{http_code}\n' -H 'content-type: application/json' --data-binary @- https://rpc.tiramisu.db-chain.testnet.arkiv.network
+  pad 262200 | curl -s -w ' HTTP %{http_code}\n' -H 'content-type: application/json' --data-binary @- https://rpc.tiramisu.db-chain.testnet.arkiv.network
+  ```
+
+  Our run at 16:09 UTC: 262,144 bytes returned `{"result":"0x7614d1"} HTTP 200`; 262,200 bytes returned `{"error":"BAD_REQUEST","message":"request body too large"} HTTP 413`.
+- **What would fix it:** (1) the SDK computes the JSON-RPC body size before sending and throws a size error naming the byte count and the 262,144-byte limit; (2) the docs give the usable payload ceiling (about 125 KiB with a few attributes) next to the 128 KiB figure; (3) the SDK surfaces the RPC's own `request body too large` message instead of `Execution error without revert data`.
 - **Our workaround:** 96 KiB chunks, one per transaction ([`vault.ts`](../packages/core/src/crypto/vault.ts) `CHUNK_BYTES`, [`writes.ts`](../packages/core/src/arkiv/writes.ts) `chunksPerTx`).
 
 ### F2. The same limit covers a whole batch, with no documentation and the same opaque error
 
 - **Surface:** `executeBatch`.
 - **Expected:** a batch of creates, each under 128 KiB, goes through. Nothing in the docs mentions a batch size limit.
-- **Actual:** `2 × 48 KiB` works (`0x925daa42…bd226d3`). `2 × 64 KiB`, `3 × 48 KiB`, `2 × 80 KiB` and `2 × 96 KiB` all fail with `Execution error without revert data`. In the 2 × 96 KiB case, the cause chain holds a viem `HttpRequestError` with `Details: "BAD_REQUEST"` from `eth_estimateGas`; the top-level message never says the request was too big.
+- **Actual:** `2 × 48 KiB` works (`0x925daa42…bd226d3`). `2 × 64 KiB`, `3 × 48 KiB`, `2 × 80 KiB` and `2 × 96 KiB` all fail with `Execution error without revert data`. Same cause as F1: the batch's JSON-RPC body passes 262,144 bytes. In the 2 × 96 KiB case the cause chain holds viem's `HttpRequestError` with `Details: "BAD_REQUEST"`, but the top-level message never says the request was too big.
 - **Repro:** `npx tsx scripts/probe.ts sizes` (batch lines), or `CHUNKS_PER_TX=2 npx tsx scripts/e2e.ts 2` for the real case.
 - **Cost to us:** we wanted a whole vault (ciphertext, manifest, envelopes, heartbeat) in one atomic batch. Above about 120 KiB that is impossible, so ciphertext goes first, one chunk per transaction, each chunk created and sealed atomically. The manifest batch is what makes the vault exist, so readers still never see half a vault.
 - **What would fix it:** a documented per-transaction size budget for `executeBatch`, and an SDK that splits or refuses with the measured size.

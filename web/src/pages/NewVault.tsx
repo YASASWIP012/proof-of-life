@@ -170,7 +170,7 @@ function Form({ account }: { account: OpenKey["account"] }) {
               <tr><td className="py-1 pr-2">{k} of {custodians.length || "n"}, rhythm, release mode, tag</td><td>Anything that names you</td></tr>
             </tbody>
           </table>
-          <p className="mt-3 text-xs text-muted">Someone watching the chain can see when you check in. Use the rhythm you would keep anyway, and check in from a network you would use anyway.</p>
+          <p className="mt-3 text-xs text-muted">Someone watching the chain can see when you check in, and the Arkiv node sees the IP address you check in from. Check in at times you would be online anyway, over Tor or a VPN you already use.</p>
           <label className="mt-4 flex gap-2 text-sm"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> I understand nobody can delete this vault once sealed, me included, and that missing check-ins releases it. These are lawfully obtained records, with no classified material and no other person's private data.</label>
           <Button className="mt-4 w-full" disabled={!ready || busy} onClick={seal}>{busy ? "Sealing…" : "Seal and start my heartbeat"}</Button>
           {err && <div className="mt-3"><Notice tone="danger">{err}</Notice></div>}

@@ -112,11 +112,12 @@ Pages and the CLI watcher subscribe with `watchEntityEvents` over a **WebSocket*
 | Who | What they see | What they do not see |
 |---|---|---|
 | Anyone reading Arkiv | random `vault_id`s, ciphertext sizes, `k` and `n`, rhythm, the heartbeat deadline, check-in times, one-time custodian addresses, which slots released | names, titles, file names, document contents, which vaults belong to the same person (each vault is sealed by a fresh activist key) |
+| The Arkiv RPC node (and our read relay, when it is used) | the IP address of every read and every check-in, and which vault it touched | contents, names, or whether a check-in was a duress one |
 | The gas tap (our Vercel function) | the fresh address it funds and the request's IP address | keys, documents, vault ids. It keeps no log of its own; the hosting platform's request logs still exist |
 | Someone holding the activist's phone | a list of passphrase-sealed blobs | addresses, roles, labels and vaults. Vaults are not stored on the phone; the app finds them on Arkiv after unlocking |
 | Someone forcing a check-in | a normal check-in, on the phone, on the vault page and on chain | that the duress passphrase was used: the key blob looks like any other, and the check-in note has the same size and shape as a normal one |
 
-Check-in timing stays visible to anyone watching the chain. The app says so before sealing and suggests checking in at times the activist would be online anyway.
+Check-in timing stays visible to anyone watching the chain, and the RPC node sees the IP address a check-in comes from. An activist facing a capable adversary should check in over Tor or a VPN they already use, and at times they would be online anyway. The app says this before sealing.
 
 ## What stays off Arkiv, on purpose
 
