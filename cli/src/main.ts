@@ -101,13 +101,14 @@ async function main() {
       const { head, vaults } = await listVaults(reader, { stopsWithinS: days("stops-within"), rhythmAtLeastS: days("rhythm-at-least") });
       for (const v of vaults) {
         const s = vaultStatus({ head, heartbeatExpiresAt: v.heartbeatExpiresAt, graceS: v.graceS, k: v.k, validReleases: v.releases });
-        log(`${s.phase.padEnd(9)} ${v.vaultId} ${v.creator} ${v.k}/${v.n}`);
+        const sealed = v.sealedAtMs ? new Date(v.sealedAtMs).toISOString().slice(0, 10) : "?";
+        log(`${s.phase.padEnd(9)} ${v.vaultId} ${v.creator} ${v.k}/${v.n}  ${v.chunks} × 96 KiB  sealed ${sealed}`);
       }
       return 0;
     }
     case "released": {
       // Released evidence, found from the chain alone, including vaults that were unlisted while alive.
-      for (const r of await listReleased(reader)) log(`${r.vaultId} ${r.creator} pieces ${r.pieces} first at block ${r.firstBlock}`);
+      for (const r of await listReleased(reader)) log(`${r.vaultId} ${r.creator} pieces ${r.pieces}${r.ignored ? ` (+${r.ignored} ignored)` : ""} first at block ${r.firstBlock}`);
       return 0;
     }
     case "status": {

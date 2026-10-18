@@ -476,6 +476,8 @@ export const en = {
   rti_letter_intime: "This appeal is filed within the thirty days allowed by section 19(1).",
   rti_letter_late: "This appeal is filed after the thirty days in section 19(1). I ask that it be admitted under the proviso to that section, because {reason}.",
   rti_letter_record: "\n4. A salted fingerprint of the application was recorded on the Arkiv network in block {block} on {time}, which shows the application existed by then: {link}\nI hold the receipt that matches this record to the enclosed copy of the application.\n",
+  vl_ignored: " · {m} ignored",
+  vl_size: "{c} × 96 KiB ciphertext · sealed {d}",
 } as const;
 
 export type Strings = { [K in keyof typeof en]: string };

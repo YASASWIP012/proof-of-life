@@ -50055,6 +50055,26 @@ var ReleasePayload = external_exports.object({
 });
 var secondsToBlocks = (s) => BigInt(Math.ceil(s / BLOCK_SECONDS));
 
+// ../packages/core/src/arkiv/rti.ts
+var RTI_APPEAL_DAYS = 30 + 45 + 90;
+var hex322 = external_exports.string().regex(/^0x[0-9a-f]{64}$/);
+var RtiPayload = external_exports.object({
+  v: external_exports.literal(2),
+  commitment: hex322,
+  due_block: external_exports.string().regex(/^\d+$/)
+});
+var RtiReceipt = external_exports.object({
+  v: external_exports.literal(2),
+  kind: external_exports.literal("proof-of-life/rti-receipt"),
+  salt: hex322,
+  sha256: hex322,
+  commitment: hex322,
+  key: hex322,
+  block: external_exports.string().regex(/^\d+$/),
+  due_block: external_exports.string().regex(/^\d+$/),
+  tx: external_exports.string().optional()
+});
+
 // ../packages/core/src/arkiv/status.ts
 function vaultStatus(i) {
   const releasesNeeded = Math.max(0, i.k - i.validReleases);
@@ -51752,6 +51772,27 @@ async function loadCiphertext(client, view) {
   const ciphertext = reassemble(ordered.map((r) => r.payload), view.manifest.chunks.hashes, view.manifest.ciphertext_sha256);
   return { ciphertext, keys: ordered.map((r) => ({ key: r.key, expiresAt: r.expiresAt })) };
 }
+function countValidReleases(manifest, rows) {
+  if (!manifest?.custodians || !manifest.commitments || !manifest.vault_id) return 0;
+  const custodianOf = new Map(manifest.custodians.map((c) => [c.slot, c.address.toLowerCase()]));
+  const seen = /* @__PURE__ */ new Set();
+  for (const r of [...rows].sort((a, b) => Number(a.createdAt - b.createdAt))) {
+    const slot = num2(r, "slot");
+    if (seen.has(slot) || custodianOf.get(slot) !== r.creator.toLowerCase()) continue;
+    try {
+      const body = ReleasePayload.parse(JSON.parse(new TextDecoder().decode(r.payload)));
+      if (body.slot !== slot) continue;
+      if (body.sealed_to_newsroom) {
+        seen.add(slot);
+        continue;
+      }
+      const share = hexToBytes2(body.share);
+      if (share[0] === slot && checkShare(manifest.vault_id, share, manifest.commitments).ok) seen.add(slot);
+    } catch {
+    }
+  }
+  return seen.size;
+}
 async function listVaults(client, opts = {}) {
   const walk3 = async (b) => {
     const { rows, blockNumber } = await fetchAll(b, { max: 2e3 });
@@ -51777,8 +51818,8 @@ async function listVaults(client, opts = {}) {
     const id = `${text(h, "vault_id")}:${h.creator.toLowerCase()}`;
     if ((beatOf.get(id) ?? 0n) < h.expiresAt) beatOf.set(id, h.expiresAt);
   }
-  const releaseCount = /* @__PURE__ */ new Map();
-  for (const r of all.entities.filter((r2) => kindRow(r2) === "release")) releaseCount.set(text(r, "vault_id"), (releaseCount.get(text(r, "vault_id")) ?? 0) + 1);
+  const releaseRows = /* @__PURE__ */ new Map();
+  for (const r of all.entities.filter((r2) => kindRow(r2) === "release")) releaseRows.set(text(r, "vault_id"), [...releaseRows.get(text(r, "vault_id")) ?? [], r]);
   return {
     head: all.blockNumber,
     vaults: all.entities.filter((r) => kindRow(r) === "vault").map((r) => {
@@ -51797,24 +51838,40 @@ async function listVaults(client, opts = {}) {
         createdAt: r.createdAt,
         graceS: Number.isFinite(num2(r, "grace_s")) ? num2(r, "grace_s") : Number(m.grace_s ?? 0),
         heartbeatExpiresAt: beatOf.get(`${text(r, "vault_id")}:${r.creator.toLowerCase()}`) ?? null,
-        releases: releaseCount.get(text(r, "vault_id")) ?? 0
+        releases: countValidReleases(m, releaseRows.get(text(r, "vault_id")) ?? []),
+        // Size and seal time straight from typed attributes on listed vaults; unlisted ones keep them in the manifest.
+        chunks: Number.isFinite(num2(r, "chunks")) ? num2(r, "chunks") : Number(m.chunks?.count ?? 0),
+        sealedAtMs: Number.isFinite(num2(r, "sealed_at_ms")) ? num2(r, "sealed_at_ms") : Number(m.sealed_at_ms ?? 0)
       };
     })
   };
 }
 async function listReleased(client) {
-  const { rows } = await fetchAll(client.select({ creator: true, createdAt: true, attributes: true }).where(eq("project", str(PROJECT)), eq("type", str("release"))).limit(200), { max: 2e3 });
+  const { rows } = await fetchAll(client.select({ creator: true, createdAt: true, attributes: true, payload: true }).where(eq("project", str(PROJECT)), eq("type", str("release"))).limit(200), { max: 2e3 });
   const by = /* @__PURE__ */ new Map();
   for (const r of rows) {
     const creator = r.attributes.vault_creator?.value;
     if (!creator) continue;
     const id = `${text(r, "vault_id")}:${creator.toLowerCase()}`;
-    const cur = by.get(id) ?? { vaultId: text(r, "vault_id"), creator: getAddress(creator), pieces: 0, firstBlock: r.createdAt };
-    cur.pieces++;
+    const cur = by.get(id) ?? { vaultId: text(r, "vault_id"), creator: getAddress(creator), rows: [], firstBlock: r.createdAt };
+    cur.rows.push(r);
     if (r.createdAt < cur.firstBlock) cur.firstBlock = r.createdAt;
     by.set(id, cur);
   }
-  return [...by.values()].sort((a, b) => Number(b.firstBlock - a.firstBlock));
+  const out = await Promise.all(
+    [...by.values()].map(async (v) => {
+      let manifest = null;
+      try {
+        const page = await client.select({ payload: true, creator: true }).where(eq("vault_id", bytes32(v.vaultId)), or(eq("type", str("vault")), eq("type", str(kindTag(v.vaultId, "vault"))))).createdBy(v.creator).limit(1).fetch();
+        const row = page.entities[0];
+        if (row) manifest = JSON.parse(new TextDecoder().decode(row.payload));
+      } catch {
+      }
+      const pieces = countValidReleases(manifest, v.rows);
+      return { vaultId: v.vaultId, creator: v.creator, pieces, ignored: v.rows.length - pieces, firstBlock: v.firstBlock };
+    })
+  );
+  return out.sort((a, b) => Number(b.firstBlock - a.firstBlock));
 }
 
 // ../packages/core/src/arkiv/events.ts
@@ -52101,12 +52158,13 @@ async function main() {
       const { head, vaults } = await listVaults(reader, { stopsWithinS: days("stops-within"), rhythmAtLeastS: days("rhythm-at-least") });
       for (const v of vaults) {
         const s = vaultStatus({ head, heartbeatExpiresAt: v.heartbeatExpiresAt, graceS: v.graceS, k: v.k, validReleases: v.releases });
-        log(`${s.phase.padEnd(9)} ${v.vaultId} ${v.creator} ${v.k}/${v.n}`);
+        const sealed = v.sealedAtMs ? new Date(v.sealedAtMs).toISOString().slice(0, 10) : "?";
+        log(`${s.phase.padEnd(9)} ${v.vaultId} ${v.creator} ${v.k}/${v.n}  ${v.chunks} \xD7 96 KiB  sealed ${sealed}`);
       }
       return 0;
     }
     case "released": {
-      for (const r of await listReleased(reader)) log(`${r.vaultId} ${r.creator} pieces ${r.pieces} first at block ${r.firstBlock}`);
+      for (const r of await listReleased(reader)) log(`${r.vaultId} ${r.creator} pieces ${r.pieces}${r.ignored ? ` (+${r.ignored} ignored)` : ""} first at block ${r.firstBlock}`);
       return 0;
     }
     case "status": {

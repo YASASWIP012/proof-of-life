@@ -35,7 +35,7 @@ export default function Vaults() {
             {released.map((r) => (
               <li key={r.vaultId + r.creator} className="flex items-center justify-between py-2 text-sm">
                 <Link className="font-mono underline" to={vaultPath(r.vaultId, r.creator)}>{short(r.vaultId)}</Link>
-                <span className="text-muted">{t("vl_pieces", { n: r.pieces, b: r.firstBlock.toString() })}</span>
+                <span className="text-muted">{t("vl_pieces", { n: r.pieces, b: r.firstBlock.toString() })}{r.ignored ? t("vl_ignored", { m: r.ignored }) : ""}</span>
               </li>
             ))}
           </ul>
@@ -59,6 +59,7 @@ export default function Vaults() {
                 <PhaseBadge phase={v.phase} />
               </div>
               <p className="mt-2 text-xs text-muted">{t("vl_row", { k: v.k, n: v.n, mode: v.mode, by: short(v.creator, 4) })}</p>
+              {v.sealedAtMs > 0 && <p className="mt-1 text-xs text-muted">{t("vl_size", { c: v.chunks, d: new Date(v.sealedAtMs).toLocaleDateString() })}</p>}
             </Card>
           </Link>
         ))}
