@@ -6,8 +6,9 @@ const ALLOWED = new Set([
   "arkiv_query", "arkiv_getEntity", "arkiv_getEntityCount", "arkiv_getBlockTiming",
   "eth_blockNumber", "eth_chainId", "eth_getBalance", "eth_getTransactionCount", "eth_getTransactionReceipt",
   "eth_gasPrice", "eth_maxPriorityFeePerGas", "eth_feeHistory", "eth_estimateGas", "eth_getBlockByNumber",
-  "eth_call", "eth_sendRawTransaction",
+  "eth_call",
 ]);
+// Read-only on purpose: no transaction is ever sent through our key. Writes go straight from the user's browser.
 const CACHEABLE = new Set(["arkiv_query", "arkiv_getEntity", "eth_blockNumber", "eth_getBalance"]);
 const cache = new Map<string, { at: number; body: string }>();
 const perIp = limiter(600, 60 * 60 * 1000);
