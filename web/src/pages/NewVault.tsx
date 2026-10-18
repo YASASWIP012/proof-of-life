@@ -8,7 +8,8 @@ import { Button, Card, Copy, Field, Notice, TxLink, inputCls } from "../componen
 import { duration, fmtBytes, vaultPath } from "../lib/format";
 import { parseInvite, type OpenKey } from "../lib/keys";
 import { readClient } from "../lib/net";
-import { ensureGas } from "../lib/tap";
+import { ensureGas, waitForOwnFunds } from "../lib/tap";
+import { formatEther } from "viem";
 
 const RHYTHMS = [
   { id: "daily", label: "Every day", interval: 86_400, grace: 86_400 },
@@ -44,13 +45,15 @@ function Form({ account, keyInfo: key }: { account: OpenKey["account"]; keyInfo:
   const [newsroom, setNewsroom] = useState("");
   const [listed, setListed] = useState(false);
   const [anyoneKeeps, setAnyoneKeeps] = useState(true);
+  const [ownGas, setOwnGas] = useState(false);
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<{ text: string; tx?: string }[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<{ manifest: Manifest; vaultId: Hex } | null>(null);
 
-  const total = files.reduce((n, f) => n + f.size, 0);
+  // Photos shrink before sealing, so they count at an estimated 250 KB each against the limit.
+  const total = files.reduce((n, f) => n + (f.type.startsWith("image/") && f.type !== "image/gif" ? Math.min(f.size, 250_000) : f.size), 0);
   const parsed = invites.map((c) => {
     if (!c.trim()) return null;
     try {
@@ -71,12 +74,18 @@ function Form({ account, keyInfo: key }: { account: OpenKey["account"]; keyInfo:
     try {
       const sealed = sealVault({
         title, note, k,
-        files: await Promise.all(files.map(async (f) => ({ name: f.name, type: f.type || "application/octet-stream", bytes: new Uint8Array(await f.arrayBuffer()) }))),
+        files: await Promise.all(files.map(prepareFile)),
         custodianPubKeys: custodians.map((c) => hexToBytes(c.pubkey)),
         beatTokens: key.tokens ?? undefined,
       });
       setLog((l) => [...l, { text: `Encrypted ${files.length} file(s) in this browser; ${sealed.chunks.length} ciphertext chunk(s).` }]);
-      await ensureGas(account.address, BigInt(sealed.chunks.length + 2) * 4_000_000_000_000_000n);
+      const need = BigInt(sealed.chunks.length + 2) * 4_000_000_000_000_000n;
+      if (ownGas) {
+        setLog((l) => [...l, { text: `Send at least ${formatEther(need)} GLM on Arkiv Tiramisu to ${account.address} from your own wallet or the faucet. Waiting…` }]);
+        await waitForOwnFunds(account.address, need, () => {});
+      } else {
+        await ensureGas(account.address, need);
+      }
       const res = await createVault(walletClient(account), readClient(), {
         sealed, k, custodians, intervalS: r.interval, graceS: r.grace, mode,
         newsroomPubkey: mode === "newsroom" ? (newsroom as Hex) : undefined, listed, keepAliveByAnyone: anyoneKeeps,
@@ -111,7 +120,7 @@ function Form({ account, keyInfo: key }: { account: OpenKey["account"]; keyInfo:
       <div className="space-y-6">
         <Card>
           <h2 className="font-serif text-lg font-bold">1 · Documents</h2>
-          <p className="mt-1 text-sm text-muted">Up to about 1.4 MB in total. Scans of RTI replies, notes, photos. Test documents only on this testnet.</p>
+          <p className="mt-1 text-sm text-muted">Up to about 1.4 MB after compression. Photos of RTI replies are shrunk on this phone first, so a multi-page reply usually fits. Test documents only on this testnet.</p>
           <input type="file" multiple className="mt-3 block text-sm" onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
           {files.length > 0 && <p className="mt-2 text-xs text-muted">{files.length} file(s) · {fmtBytes(total)}</p>}
           {total > MAX_BUNDLE_BYTES * 0.7 && <Notice tone="danger">Too large. Keep the total under 1.4 MB.</Notice>}
@@ -160,6 +169,10 @@ function Form({ account, keyInfo: key }: { account: OpenKey["account"]; keyInfo:
               <input type="checkbox" className="switch mt-1" checked={anyoneKeeps} onChange={(e) => setAnyoneKeeps(e.target.checked)} />
             </label>
             <label className="flex items-start justify-between gap-4 text-sm">
+              <span><b>Pay gas from my own wallet</b><br /><span className="text-muted">Off: a shared tap sends this key a little test GLM, and the tap's address links every key it funds. On: send GLM to this key yourself, for example with the faucet's "Use a different address".</span></span>
+              <input type="checkbox" className="switch mt-1" checked={ownGas} onChange={(e) => setOwnGas(e.target.checked)} />
+            </label>
+            <label className="flex items-start justify-between gap-4 text-sm">
               <span><b>List this vault in the public directory</b><br /><span className="text-muted">Off by default. An unlisted vault carries no project tag, so only people with its link can find it.</span></span>
               <input type="checkbox" className="switch mt-1" checked={listed} onChange={(e) => setListed(e.target.checked)} />
             </label>
@@ -190,4 +203,26 @@ function Form({ account, keyInfo: key }: { account: OpenKey["account"]; keyInfo:
       </div>
     </div>
   );
+}
+
+/**
+ * RTI replies are usually phone photos of paper. Photos over 300 KB are scaled to 1600 px on the long side and
+ * re-encoded as JPEG on this phone before sealing, so a multi-page reply fits in one vault. Other files are untouched.
+ */
+async function prepareFile(f: File): Promise<{ name: string; type: string; bytes: Uint8Array }> {
+  const raw = new Uint8Array(await f.arrayBuffer());
+  if (!f.type.startsWith("image/") || f.type === "image/gif" || raw.length < 300_000) return { name: f.name, type: f.type || "application/octet-stream", bytes: raw };
+  try {
+    const bmp = await createImageBitmap(f);
+    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob: Blob = await new Promise((r, j) => canvas.toBlob((b) => (b ? r(b) : j(new Error("encode failed"))), "image/jpeg", 0.72));
+    const out = new Uint8Array(await blob.arrayBuffer());
+    return out.length < raw.length ? { name: f.name.replace(/\.[^.]+$/, "") + ".jpg", type: "image/jpeg", bytes: out } : { name: f.name, type: f.type, bytes: raw };
+  } catch {
+    return { name: f.name, type: f.type, bytes: raw };
+  }
 }

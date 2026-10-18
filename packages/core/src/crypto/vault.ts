@@ -15,6 +15,8 @@ export type VaultFile = { name: string; type: string; bytes: Uint8Array };
 
 export type Bundle = {
   v: 1;
+  /** Random filler so the ciphertext size reveals only a 64 KiB bucket, not the documents' length. */
+  pad?: string;
   title: string;
   note: string;
   sealedAtMs: number;
@@ -63,6 +65,13 @@ export function sealVault(input: {
     sealedAtMs: input.now ?? Date.now(),
     files: input.files.map((f) => ({ name: f.name, type: f.type, size: f.bytes.length, sha256: sha256Hex(f.bytes), data: toBase64(f.bytes) })),
   };
+  // Pad to the next 64 KiB so the public chunk sizes say little about what was sealed.
+  const BUCKET = 64 * 1024;
+  const bare = JSON.stringify(bundle).length + 12;
+  const target = Math.ceil(bare / BUCKET) * BUCKET;
+  bundle.pad = "";
+  const fill = target - JSON.stringify(bundle).length;
+  if (fill > 0) bundle.pad = toBase64(randomBytes(Math.floor((fill * 3) / 4))).slice(0, fill);
   const plain = utf8(JSON.stringify(bundle));
   if (plain.length > MAX_BUNDLE_BYTES) throw new RangeError(`vault is ${plain.length} bytes; the limit is ${MAX_BUNDLE_BYTES}`);
 

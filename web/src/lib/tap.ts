@@ -21,3 +21,17 @@ export async function ensureGas(address: Hex, min = 2_000_000_000_000_000n): Pro
   }
   throw new Error("gas did not arrive in 30 s; try again");
 }
+
+/**
+ * For people who would rather not touch the shared gas tap (whose address links every key it funds): wait until the
+ * key has been funded from the person's own wallet or the faucet.
+ */
+export async function waitForOwnFunds(address: Hex, min: bigint, onTick: (have: bigint) => void, signal?: AbortSignal): Promise<bigint> {
+  for (;;) {
+    const have = await balanceOf(address);
+    onTick(have);
+    if (have >= min) return have;
+    if (signal?.aborted) throw new Error("stopped waiting for gas");
+    await new Promise((r) => setTimeout(r, 4000));
+  }
+}

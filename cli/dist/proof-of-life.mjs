@@ -17406,11 +17406,16 @@ function envelopeAad(vaultId, slot) {
   return concat(ENVELOPE_DOMAIN, hexToBytes2(vaultId), new Uint8Array([slot]));
 }
 function openEnvelope(vaultId, slot, envelope, custodianSecret, commitment) {
-  const share = decryptWith(custodianSecret, envelope, envelopeAad(vaultId, slot));
+  return openEnvelopeFull(vaultId, slot, envelope, custodianSecret, commitment).share;
+}
+function openEnvelopeFull(vaultId, slot, envelope, custodianSecret, commitment) {
+  const plain = decryptWith(custodianSecret, envelope, envelopeAad(vaultId, slot));
+  const share = plain.length === 33 + 32 ? plain.slice(0, 33) : plain;
+  const tokens = plain.length === 33 + 32 ? { ok: plain.slice(33, 49), duress: plain.slice(49, 65) } : null;
   if (share[0] !== slot || !equalBytes(hexToBytes2(shareCommitment(vaultId, share)), hexToBytes2(commitment))) {
     throw new Error(`share in slot ${slot} does not match its public commitment`);
   }
-  return share;
+  return { share, tokens };
 }
 function checkShare(vaultId, share, commitments) {
   const slot = share[0];
@@ -17438,20 +17443,23 @@ function unsealVault(vaultId, ciphertext, shares) {
 }
 
 // ../packages/core/src/crypto/duress.ts
-var OK = 0;
-var DURESS = 213;
-var PLAIN = 16;
-var BEAT_SLOT_BYTES = 33 + 12 + PLAIN + 16;
+var TOKEN_BYTES = 16;
+var BEAT_SLOT_BYTES = 33 + 12 + TOKEN_BYTES + 16;
 var aad = (vaultId, slot) => concat(utf8("proof-of-life/beat/v1"), hexToBytes2(vaultId), new Uint8Array([slot]));
-function readBeat(vaultId, payload, slot, custodianSecret) {
+function readBeatToken(vaultId, payload, slot, custodianSecret) {
   const start = (slot - 1) * BEAT_SLOT_BYTES;
   if (payload.length < start + BEAT_SLOT_BYTES) return null;
   try {
-    const plain = decryptWith(custodianSecret, payload.subarray(start, start + BEAT_SLOT_BYTES), aad(vaultId, slot));
-    return plain[0] === DURESS ? "duress" : plain[0] === OK ? "ok" : null;
+    return decryptWith(custodianSecret, payload.subarray(start, start + BEAT_SLOT_BYTES), aad(vaultId, slot));
   } catch {
     return null;
   }
+}
+function classifyToken(token, tokens) {
+  if (!token || !tokens) return null;
+  if (equalBytes(token, tokens.duress)) return "duress";
+  if (equalBytes(token, tokens.ok)) return "ok";
+  return null;
 }
 
 // ../node_modules/viem/_esm/index.js
@@ -51815,7 +51823,14 @@ var NotYet = class extends Error {
   }
 };
 function duressSignal(view, slot, secret) {
-  return view.lastBeat ? readBeat(view.vaultId, view.lastBeat.payload, slot, secret) : null;
+  const env = view.envelopes.find((e) => e.slot === slot);
+  if (!view.lastBeat || !env) return null;
+  try {
+    const { tokens } = openEnvelopeFull(view.vaultId, slot, env.payload, secret, view.manifest.commitments[slot - 1]);
+    return classifyToken(readBeatToken(view.vaultId, view.lastBeat.payload, slot, secret), tokens);
+  } catch {
+    return null;
+  }
 }
 async function releaseMyShare(wallet, reader2, view, secret) {
   const me = wallet.account.address.toLowerCase();

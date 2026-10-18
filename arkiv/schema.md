@@ -8,13 +8,15 @@ An activist seals documents into a vault and keeps a **heartbeat** entity alive 
 
 ## Entity types
 
+**Listed and unlisted.** A listed vault (the demo vaults) carries the attributes in the table below. An unlisted vault, the default for real use, carries only `vault_id`, the hashed `type`, and on envelopes the custodian's one-time address. It has no `project`, no `v`, no `idx`, no `slot` and none of the vault's numbers: `k`, `n`, rhythm and mode live only in the manifest payload, chunk order comes from matching each chunk's hash to the manifest, and a custodian's slot is its position in the manifest. Nothing about an unlisted vault can be enumerated or range-queried without first knowing its `vault_id` (verified on Tiramisu: a vault sealed this way is absent from `type = str('vault')`; see friction F5). **A release is always public**: it carries `project`, the plain `type = str('release')`, `slot` and `vault_creator`, so a vault that stayed hidden while alive becomes findable from the chain the moment its evidence is out.
+
 Every entity carries these four attributes:
 
 | Attribute | Type | Value |
 |---|---|---|
 | `project` | `str` | `proof-of-life`, **only on listed vaults**. Unlisted vaults (the default) omit it, so nobody can enumerate them through our directory query; they are found by `vault_id`, which only link holders know |
 | `v` | `i32` | `1` (schema version) |
-| `type` | `str` | one of `vault`, `chunk`, `envelope`, `heartbeat`, `beat`, `ack`, `release` |
+| `type` | `str` | listed vaults: one of `vault`, `chunk`, `envelope`, `heartbeat`, `beat`, `ack`, `release`. Unlisted vaults: `x` + the first 12 bytes of `sha256("proof-of-life/kind/v1" ‖ vault_id ‖ kind)` as hex, for every kind except `release` (see below) |
 | `vault_id` | `bytes32` | random 32 bytes chosen in the activist's browser; links every entity of one vault |
 
 `vault_id` is a link, not a credential. Anyone can write an entity with any `vault_id`. Trust comes only from `$creator`, as the trust rules below say.
@@ -25,7 +27,7 @@ Every entity carries these four attributes:
 | `vault` (manifest) | activist | `k` `i32`, `n` `i32`, `mode` `str`, `interval_s` `u64`, `grace_s` `u64`, `chunks` `i32`, `sealed_at_ms` `u64` | JSON manifest (below) | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
 | `envelope` | activist | `slot` `i32`, `custodian` `addr` | one key share, ECIES-encrypted to that custodian's key | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
 | `heartbeat` | activist | `interval_s` `u64`, `grace_s` `u64` | empty | readonly, **not** permissionless | activist | `interval_s + grace_s`, reset by every check-in |
-| `beat` | activist | none | one encrypted ok/duress flag per custodian, fixed size (`n` × 77 bytes) | readonly | activist | `interval_s + grace_s`, one per check-in |
+| `beat` | activist | none | the check-in's 16-byte token encrypted to each custodian, fixed size (`n` × 77 bytes) | readonly | activist | `interval_s + grace_s`, one per check-in |
 | `ack` | custodian | `slot` `i32` | empty | readonly | custodian | 14 days, reset by the custodian's watcher |
 | `release` | custodian | `slot` `i32` | JSON: the share (or the share encrypted to a newsroom) | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
 
@@ -34,6 +36,10 @@ Every entity carries these four attributes:
 - **heartbeat: interval + grace, reset on check-in.** The expiry *is* the dead man's switch. Only its owner can extend it, and nobody else may, so a supporter cannot keep a dead activist "alive". Deleting it, for example under coercion, just stops it sooner.
 - **ack: 14 days, renewed by activity.** A custodian's "I still hold my key" is a lease. When a custodian stops renewing, the activist sees it and can seal a new vault with someone else.
 - **chunk, vault, envelope, release: a long term anyone can extend.** The evidence must outlive the activist. Each check-in carries forward any sealed entity due to expire within 30 days, and after a release anyone can press "keep alive". The UI and CLI say plainly when data nears its end.
+
+### When the activist turns off "let anyone keep the evidence alive"
+
+Then chunks, manifest and envelopes are created read-only **without** `permissionlessExtension` and **stay owned by the activist**. Only the activist can extend them, and it can let them lapse. (Sealing them to `0x…dEaD` as well would leave entities nobody could ever extend.) The trade-off is stated in the app: an owner can also delete, so this option gives up protection against forced deletion in exchange for full control of the data's lifetime.
 
 ### Why "sealed" means readonly plus `0x…dEaD`
 
@@ -59,6 +65,10 @@ Every entity carries these four attributes:
 
 Nothing in the manifest identifies the activist, the custodians or the documents, and it holds no free text at all. Titles, notes, file names and any label the activist uses live inside the ciphertext. (The three demo vaults seeded on 17 October carry a short `tag`; new vaults never write one.)
 
+## The duress signal
+
+Each activist key has two random 16-byte tokens, `ok` and `duress`. At sealing, both go to every custodian **inside its envelope** (envelope plaintext = share ‖ ok ‖ duress). Each check-in writes a `beat` whose payload is the session's token encrypted to every custodian. On the phone, the key opened by the real passphrase checks in with `ok`; the second blob, opened by the duress passphrase, holds the same key and checks in with `duress`. Neither blob contains a flag: a token is random bytes, and only a custodian comparing it with its envelope can classify it. A key made without a duress passphrase gets a decoy second blob sealed under a random passphrase, so a phone always holds two blobs of the same size per key. Measured on Tiramisu: a normal and a forced check-in have identical calldata length (4042 bytes) and target, and the public phase stays "alive" (`scripts/duress.ts`). Code: [`crypto/duress.ts`](../packages/core/src/crypto/duress.ts).
+
 ## Release payload (`release`, `application/json`)
 
 ```jsonc
@@ -83,9 +93,11 @@ Readers (web app, CLI, any third party) apply these rules. Anything that fails i
 |---|---|---|
 | Everything about one vault except ciphertext (one request per page view) | `vault_id = bytes32(V) AND NOT (type = str('chunk'))` | `loadVault` in [`reads.ts`](../packages/core/src/arkiv/reads.ts) |
 | The ciphertext, only from the vault's creator, paginated with a cursor | `vault_id = bytes32(V) AND type = str('chunk')` + `.createdBy(C)` | `loadCiphertext` |
+| Released evidence, including vaults unlisted while alive | `project = str('proof-of-life') AND type = str('release')`, grouped by `vault_id` and `vault_creator` |
+| A vault as it stood at a past block (proof it was alive then) | the vault query with `.atBlock(N)` |
 | Listed vaults for the directory, every page walked with the cursor | `project = str('proof-of-life') AND type = str('vault')`, plus the same for `heartbeat` and `release` |
-| One activist key's own vaults, listed or not (check-in page) | `type = str('vault')` + `.createdBy(key)` | `listVaults` |
-| Envelopes addressed to one custodian key | `type = str('envelope') AND custodian = addr(A)` | `envelopesFor` |
+| One activist key's own vaults, listed or not (check-in page) | `$creator = addr(key)`, kinds recognised by `kindOf` | `listVaults` |
+| Envelopes addressed to one custodian key | `custodian = addr(A)`, kinds recognised by `kindOf` | `envelopesFor` |
 | Is this heartbeat alive? | `… AND type = str('heartbeat') AND $creator = addr(C)` and compare `$expiresAt` with the head | vault page "Check this without us" panel |
 
 Arkiv has no server-side ordering, so chunks are ordered by their `idx` attribute and releases by `$createdAt` on the client.
@@ -103,7 +115,7 @@ Pages and the CLI watcher subscribe with `watchEntityEvents` over a **WebSocket*
 | Action | Batch |
 |---|---|
 | Seal | N × `chunk` creates, each batch handing its chunks to `0x…dEaD`; then one batch: `vault` + n × `envelope` + `heartbeat`, with `vault` and envelopes handed to `0x…dEaD`. The vault appears whole, and its clock starts, in one block |
-| Check in | extend `heartbeat` by `interval + grace`, create one `beat` note, and extend any sealed entity due within 30 days |
+| Check in | extend `heartbeat` by `interval + grace`, create one `beat` note, and extend every vault entity due within 30 days that the activist may extend (`extendableKeys`: permissionless ones, plus ones it still owns), chunks included, so a check-in batch can never revert |
 | Confirm custody | create `ack`, or extend the existing one by 14 days |
 | Release | create `release` and hand it to `0x…dEaD` in the same batch |
 | Keep alive | extend sealed entities (anyone) |
@@ -112,7 +124,7 @@ Pages and the CLI watcher subscribe with `watchEntityEvents` over a **WebSocket*
 
 | Who | What they see | What they do not see |
 |---|---|---|
-| Anyone reading Arkiv | random `vault_id`s, ciphertext sizes, `k` and `n`, rhythm, the heartbeat deadline, check-in times, one-time custodian addresses, which slots released | names, titles, file names, document contents, which vaults belong to the same person (each vault is sealed by a fresh activist key) |
+| Anyone reading Arkiv | for a vault whose link they hold: ciphertext sizes, `k` and `n`, rhythm, the heartbeat deadline, check-in times, one-time custodian addresses, which slots released | names, titles, file names, document contents, which vaults belong to the same person (each vault is sealed by a fresh activist key) |
 | The Arkiv RPC node (and our read relay, when it is used) | the IP address of every read and every check-in, and which vault it touched | contents, names, or whether a check-in was a duress one |
 | The gas tap (our Vercel function) | the fresh address it funds and the request's IP address | keys, documents, vault ids. It keeps no log of its own; the hosting platform's request logs still exist |
 | Someone holding the activist's phone | a list of passphrase-sealed blobs | addresses, roles, labels and vaults. Vaults are not stored on the phone; the app finds them on Arkiv after unlocking |
