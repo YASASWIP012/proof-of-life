@@ -1,7 +1,7 @@
 // The demo keeper. Runs every 30 minutes in GitHub Actions, far from the website:
 // it checks in for the "always-alive" activist, renews custody leases, and releases any demo vault whose heartbeat stopped.
 import { readFileSync } from "node:fs";
-import { ackCustody, checkIn, extendableKeys, isListed, loadVault, publicClient, releaseMyShare, walletClient, type VaultView } from "@proof-of-life/core";
+import { ackCustody, beatPayload, checkIn, extendableKeys, isListed, loadVault, publicClient, randomBytes, releaseMyShare, walletClient, type VaultView } from "@proof-of-life/core";
 import { account, rpc } from "./env.js";
 
 const reader = publicClient({ rpc });
@@ -18,7 +18,10 @@ for (const [name, r] of Object.entries(registry)) {
   }
   console.log(`${name}: ${v.status.phase}`);
   if (r.checkIn && v.heartbeat && v.status.blocksToDue !== null && v.status.blocksToDue < BigInt(Math.ceil((v.manifest.interval_s * 0.6) / 2))) {
-    const tx = await checkIn(walletClient(account(r.activist), { rpc }), { heartbeatKey: v.heartbeat.key, intervalS: v.manifest.interval_s, graceS: v.manifest.grace_s, sealed: await extendableKeys(reader, v, "activist"), head: v.head });
+    // Demo vaults were sealed before check-in tokens existed, so the keeper's note carries a random token. Its size
+    // and shape match a real check-in's on chain; custodians simply read it as neither ok nor duress.
+    const beat = { vaultId: v.vaultId, payload: beatPayload(v.vaultId, v.manifest.custodians.map((c) => c.pubkey as `0x${string}`), randomBytes(16)), listed: isListed(v.manifest) };
+    const tx = await checkIn(walletClient(account(r.activist), { rpc }), { heartbeatKey: v.heartbeat.key, intervalS: v.manifest.interval_s, graceS: v.manifest.grace_s, sealed: await extendableKeys(reader, v, "activist"), head: v.head, beat });
     console.log(`  checked in ${tx.txHash}`);
   }
   for (const [i, idx] of r.custodians.entries()) {

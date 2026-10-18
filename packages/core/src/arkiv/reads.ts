@@ -6,7 +6,7 @@ import { getAddress } from "viem";
 import { hexToBytes } from "../crypto/bytes.js";
 import { checkShare, reassemble } from "../crypto/vault.js";
 import type { PublicClient } from "./client.js";
-import { kindOf, kindTag, Manifest, PROJECT, ReleasePayload, SEAL_ADDRESS } from "./schema.js";
+import { kindOf, kindTag, Manifest, PROJECT, ReleasePayload, SEAL_ADDRESS, sealOwner } from "./schema.js";
 import { sha256Hex } from "../crypto/vault.js";
 import { or } from "@arkiv-network/sdk/query";
 import { BLOCK_SECONDS } from "./schema.js";
@@ -56,7 +56,8 @@ export type VaultView = {
   sealedKeys: { key: Hex; expiresAt: bigint; owner: Hex; permissionless: boolean }[];
 };
 
-const isSealed = (r: Row) => r.creationFlags.readonly && same(r.owner, SEAL_ADDRESS);
+/** Read-only and owned by an address nobody holds: 0x…dEaD, or the unlisted vault's own seal address. */
+const isSealed = (r: Row, vaultId: Hex) => r.creationFlags.readonly && (same(r.owner, SEAL_ADDRESS) || same(r.owner, sealOwner(vaultId, false)));
 
 type Pageable = { atBlock(block: bigint): Pageable; fetch(): Promise<{ entities: unknown[]; blockNumber: bigint; hasNextPage(): boolean; next(): Promise<any> }> };
 
@@ -130,7 +131,7 @@ export function assembleVault(rows: Row[], vaultId: Hex, creator: Hex, head: big
     if (!same(r.creator, creator)) return reject(r, "envelope not written by the vault's creator"), [];
     const custodian = getAddress(String(r.attributes.custodian?.value));
     const slot = slotOf(r, custodian);
-    return [{ key: r.key, slot, custodian, expiresAt: r.expiresAt, sealed: isSealed(r), payload: r.payload }];
+    return [{ key: r.key, slot, custodian, expiresAt: r.expiresAt, sealed: isSealed(r, vaultId), payload: r.payload }];
   });
 
   const acks = byType("ack").flatMap((r) => {
@@ -184,7 +185,7 @@ export function assembleVault(rows: Row[], vaultId: Hex, creator: Hex, head: big
     head,
     createdAt: v.createdAt,
     expiresAt: v.expiresAt,
-    sealed: isSealed(v),
+    sealed: isSealed(v, vaultId),
     heartbeat: hb ? { key: hb.key, expiresAt: hb.expiresAt, owner: hb.owner, createdAt: hb.createdAt } : null,
     lastBeat: lastBeat ? { key: lastBeat.key, createdAt: lastBeat.createdAt, payload: lastBeat.payload } : null,
     envelopes,

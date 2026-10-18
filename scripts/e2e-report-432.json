@@ -1,0 +1,62 @@
+{
+  "run": 432,
+  "sdk": "0.8.1",
+  "started": "2026-10-18T16:54:36.596Z",
+  "createTxs": [
+    {
+      "h": "0x096bcb7e3b7d26da9d39a7be203ab125cc38f6e320f318243ce38e3d8a31082e",
+      "gas": "3961540",
+      "glm": "0.00396154000792308"
+    },
+    {
+      "h": "0x5fcb6b90cb7841aba8612e93ebae540a964be0b7ed9d7c2e8e56ab14a0c04af0",
+      "gas": "3961840",
+      "glm": "0.00396184000792368"
+    },
+    {
+      "h": "0xa6d7b14e93a3bcd74e8c1bb0c4aec9229fc8770fe4122abf5d8fd7c21aeaed8b",
+      "gas": "2656210",
+      "glm": "0.00265621000531242"
+    },
+    {
+      "h": "0x701ece98d08ae1c0547fb9455e086a8b463ef98b8b78da251973c2cbe8865dd1",
+      "gas": "570808",
+      "glm": "0.000570808001141616"
+    }
+  ],
+  "afterCreate": {
+    "phase": "alive",
+    "sealed": true
+  },
+  "ackGas": {
+    "gas": "90384",
+    "glm": "0.000090384000180768"
+  },
+  "earlyReleaseRefused": "the heartbeat is alive; a custodian may only release after it stops",
+  "activistDeleteSealed": "refused: Transaction failed: entity 0x4c15a833…4c0b70 is owned by 0xa5ED18f0616E3Cfe769266b38180ccD6AF1575b2, not 0x3410479ED22aF4903B3002d61d516b0f9eC738a6",
+  "strangerExtendHeartbeat": "refused: Transaction failed: entity 0x274eff14…4ff064 is owned by 0x3410479ED22aF4903B3002d61d516b0f9eC738a6, not 0xD4079323872E6d14E4B6874C8abE0c00fEE10251",
+  "carryForward": 7,
+  "checkInGas": {
+    "gas": "80000",
+    "glm": "0.00008000000016"
+  },
+  "checkInMovedExpiry": "746404 -> 746415",
+  "releaseGas": {
+    "gas": "132720",
+    "glm": "0.00013272000026544"
+  },
+  "final": {
+    "phase": "released",
+    "verified": true,
+    "files": [
+      "a.txt",
+      "noise.bin"
+    ],
+    "bigMatches": true
+  },
+  "vault": {
+    "vaultId": "0x0121408b88e8dedd263310f452c653d465018aeffe358dbd3d15c77559356173",
+    "creator": "0x3410479ED22aF4903B3002d61d516b0f9eC738a6"
+  },
+  "seconds": 137.61
+}

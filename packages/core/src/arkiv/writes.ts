@@ -4,7 +4,7 @@ import type { Hex } from "viem";
 import { bytesToHex } from "../crypto/bytes.js";
 import type { SealedVault } from "../crypto/vault.js";
 import type { PublicClient, WalletClient } from "./client.js";
-import { attrs, evenSeconds, LIFETIME, Manifest, SEAL_ADDRESS, type ReleaseMode, type ReleasePayload } from "./schema.js";
+import { attrs, evenSeconds, LIFETIME, Manifest, SEAL_ADDRESS, sealOwner, type ReleaseMode, type ReleasePayload } from "./schema.js";
 
 const SEALED = { readonly: true, permissionlessExtension: true } as const;
 const BIN = "application/octet-stream";
@@ -23,13 +23,14 @@ async function sealedBatch(
   reader: PublicClient,
   creates: Parameters<WalletClient["executeBatch"]>[0]["creates"] & {},
   keepOwnership: Set<number> = new Set(),
+  newOwner: Hex = SEAL_ADDRESS,
 ) {
   // Predict the keys so the same transaction can hand them to the seal address. The batch is atomic:
   // the entities exist sealed, or not at all.
   const predicted = await reader.predictEntityKeys({ owner: wallet.account.address, count: creates.length });
   const result = await wallet.executeBatch({
     creates: creates.map((c, i) => ({ ...c, salt: predicted[i].salt })),
-    ownershipChanges: predicted.filter((_, i) => !keepOwnership.has(i)).map((p) => ({ entityKey: p.key, newOwner: SEAL_ADDRESS })),
+    ownershipChanges: predicted.filter((_, i) => !keepOwnership.has(i)).map((p) => ({ entityKey: p.key, newOwner })),
   });
   if (result.createdEntities.some((k, i) => k.toLowerCase() !== predicted[i].key.toLowerCase())) throw new PredictionMismatch();
   return result;
@@ -60,6 +61,7 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
   const expires = ExpirationTime.fromDays(vaultDays);
   const perTx = Math.max(1, input.chunksPerTx ?? 1);
   const listed = input.listed ?? false;
+  const seal = sealOwner(sealed.vaultId, listed);
   const anyoneKeeps = input.keepAliveByAnyone ?? true;
   const SEAL = { readonly: true, permissionlessExtension: anyoneKeeps } as const;
   // With anyone-may-extend off, the activist keeps ownership so it alone can extend, or let the data expire.
@@ -75,6 +77,7 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
       reader,
       slice.map((bytes, j) => ({ payload: bytes, contentType: BIN, attributes: attrs.chunk(sealed.vaultId, i + j, listed), expires, flags: SEAL })),
       keepAll(slice.length),
+      seal,
     );
     txs.push(r.txHash);
     onProgress({ stage: "chunks", done: Math.min(i + perTx, sealed.chunks.length), total: sealed.chunks.length, txHash: r.txHash });
@@ -120,7 +123,7 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
       flags: { readonly: true, permissionlessExtension: false },
     },
   ];
-  const r = await sealedBatch(wallet, reader, creates, anyoneKeeps ? new Set([creates.length - 1]) : keepAll(creates.length));
+  const r = await sealedBatch(wallet, reader, creates, anyoneKeeps ? new Set([creates.length - 1]) : keepAll(creates.length), seal);
   txs.push(r.txHash);
   onProgress({ stage: "done", done: 1, total: 1, txHash: r.txHash });
   return { vaultKey: r.createdEntities[0], heartbeatKey: r.createdEntities[creates.length - 1], txs, manifest };

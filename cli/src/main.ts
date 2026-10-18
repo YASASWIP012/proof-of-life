@@ -36,7 +36,7 @@ function printVault(v: VaultView) {
   if (v.status.blocksToDue !== null) log(`due in     ${blocks(v.status.blocksToDue)}   stops in ${blocks(v.status.blocksToLapse!)}`);
   log(`rhythm     every ${fmt(m.interval_s)}, grace ${fmt(m.grace_s)}`);
   log(`release    ${m.k} of ${m.n} custodians, ${m.release.mode}`);
-  log(`sealed     ${v.sealed ? "yes: read-only, owned by 0x…dEaD" : "NO"}`);
+  log(`sealed     ${v.sealed ? "yes: read-only, owned by an address nobody holds" : "NO"}`);
   for (const c of m.custodians) {
     const ack = v.acks.find((a) => a.slot === c.slot);
     const rel = v.releases.find((r) => r.slot === c.slot && r.valid);

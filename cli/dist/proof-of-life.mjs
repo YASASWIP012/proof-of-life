@@ -49971,6 +49971,10 @@ function date4(params) {
 var PROJECT = "proof-of-life";
 var SCHEMA_VERSION = 1;
 var SEAL_ADDRESS = "0x000000000000000000000000000000000000dEaD";
+function sealOwner(vaultId, listed) {
+  if (listed) return SEAL_ADDRESS;
+  return `0x${bytesToHex2(sha256(concat(utf8("proof-of-life/seal/v1"), hexToBytes2(vaultId)))).slice(-40)}`;
+}
 var BLOCK_SECONDS = 2;
 var KINDS = ["vault", "chunk", "envelope", "heartbeat", "beat", "ack", "release"];
 var LIFETIME = {
@@ -49987,7 +49991,7 @@ function kindOf(type, vaultId) {
   if (KINDS.includes(type)) return type;
   return KINDS.find((k) => kindTag(vaultId, k) === type) ?? null;
 }
-var base = (kind, vaultId, listed = true) => listed ? { project: str(PROJECT), v: i32(SCHEMA_VERSION), type: str(kind), vault_id: bytes32(vaultId) } : { type: str(kindTag(vaultId, kind)), vault_id: bytes32(vaultId) };
+var base = (kind, vaultId, listed) => listed ? { project: str(PROJECT), v: i32(SCHEMA_VERSION), type: str(kind), vault_id: bytes32(vaultId) } : { type: str(kindTag(vaultId, kind)), vault_id: bytes32(vaultId) };
 var attrs = {
   vault: (p) => !p.listed ? base("vault", p.vaultId, false) : {
     ...base("vault", p.vaultId, p.listed),
@@ -50000,17 +50004,17 @@ var attrs = {
     sealed_at_ms: u64(BigInt(p.sealedAtMs))
   },
   // Unlisted chunks carry no index: readers order them by matching each payload's hash to the manifest's list.
-  chunk: (vaultId, idx, listed = true) => listed ? { ...base("chunk", vaultId), idx: i32(idx) } : base("chunk", vaultId, false),
+  chunk: (vaultId, idx, listed) => listed ? { ...base("chunk", vaultId, true), idx: i32(idx) } : base("chunk", vaultId, false),
   // The custodian address stays, so a custodian can find its envelopes; the slot comes from the manifest.
-  envelope: (vaultId, slot, custodian, listed = true) => listed ? { ...base("envelope", vaultId), slot: i32(slot), custodian: addr(custodian) } : { ...base("envelope", vaultId, false), custodian: addr(custodian) },
-  heartbeat: (vaultId, intervalS, graceS, listed = true) => !listed ? base("heartbeat", vaultId, false) : {
+  envelope: (vaultId, slot, custodian, listed) => listed ? { ...base("envelope", vaultId, true), slot: i32(slot), custodian: addr(custodian) } : { ...base("envelope", vaultId, false), custodian: addr(custodian) },
+  heartbeat: (vaultId, intervalS, graceS, listed) => !listed ? base("heartbeat", vaultId, false) : {
     ...base("heartbeat", vaultId, listed),
     interval_s: u64(BigInt(intervalS)),
     grace_s: u64(BigInt(graceS))
   },
-  ack: (vaultId, slot, listed = true) => listed ? { ...base("ack", vaultId), slot: i32(slot) } : base("ack", vaultId, false),
+  ack: (vaultId, slot, listed) => listed ? { ...base("ack", vaultId, true), slot: i32(slot) } : base("ack", vaultId, false),
   /** One per check-in. Its payload carries an encrypted ok/duress flag for each custodian. */
-  beat: (vaultId, listed = true) => base("beat", vaultId, listed),
+  beat: (vaultId, listed) => base("beat", vaultId, listed),
   /**
    * A release always carries the project tag and the vault's creator, even for an unlisted vault: a vault stays
    * hidden while it is alive, and becomes findable from the chain alone the moment its evidence is out.
@@ -51586,11 +51590,11 @@ var PredictionMismatch = class extends Error {
     super("another write from this wallet landed first; the batch was not sealed as planned");
   }
 };
-async function sealedBatch(wallet, reader2, creates, keepOwnership = /* @__PURE__ */ new Set()) {
+async function sealedBatch(wallet, reader2, creates, keepOwnership = /* @__PURE__ */ new Set(), newOwner = SEAL_ADDRESS) {
   const predicted = await reader2.predictEntityKeys({ owner: wallet.account.address, count: creates.length });
   const result = await wallet.executeBatch({
     creates: creates.map((c, i) => ({ ...c, salt: predicted[i].salt })),
-    ownershipChanges: predicted.filter((_, i) => !keepOwnership.has(i)).map((p) => ({ entityKey: p.key, newOwner: SEAL_ADDRESS }))
+    ownershipChanges: predicted.filter((_, i) => !keepOwnership.has(i)).map((p) => ({ entityKey: p.key, newOwner }))
   });
   if (result.createdEntities.some((k, i) => k.toLowerCase() !== predicted[i].key.toLowerCase())) throw new PredictionMismatch();
   return result;
@@ -51601,7 +51605,7 @@ async function ackCustody(wallet, p) {
   return wallet.createEntity({
     payload: new Uint8Array(),
     contentType: BIN,
-    attributes: attrs.ack(p.vaultId, p.slot, p.listed ?? true),
+    attributes: attrs.ack(p.vaultId, p.slot, p.listed ?? false),
     expires,
     flags: { readonly: true, permissionlessExtension: false }
   });
@@ -51623,7 +51627,7 @@ var FIELDS = { key: true, owner: true, creator: true, createdAt: true, expiresAt
 var same = (a, b) => a.toLowerCase() === b.toLowerCase();
 var num2 = (r, name) => Number(r.attributes[name]?.value ?? NaN);
 var text = (r, name) => String(r.attributes[name]?.value ?? "");
-var isSealed = (r) => r.creationFlags.readonly && same(r.owner, SEAL_ADDRESS);
+var isSealed = (r, vaultId) => r.creationFlags.readonly && (same(r.owner, SEAL_ADDRESS) || same(r.owner, sealOwner(vaultId, false)));
 async function fetchAll(b, opts = {}) {
   const max = opts.max ?? Infinity;
   let page = await (opts.atBlock !== void 0 ? b.atBlock(opts.atBlock) : b).fetch();
@@ -51674,7 +51678,7 @@ function assembleVault(rows, vaultId, creator, head) {
     if (!same(r.creator, creator)) return reject(r, "envelope not written by the vault's creator"), [];
     const custodian = getAddress(String(r.attributes.custodian?.value));
     const slot = slotOf(r, custodian);
-    return [{ key: r.key, slot, custodian, expiresAt: r.expiresAt, sealed: isSealed(r), payload: r.payload }];
+    return [{ key: r.key, slot, custodian, expiresAt: r.expiresAt, sealed: isSealed(r, vaultId), payload: r.payload }];
   });
   const acks = byType("ack").flatMap((r) => {
     const slot = slotOf(r, r.creator);
@@ -51721,7 +51725,7 @@ function assembleVault(rows, vaultId, creator, head) {
     head,
     createdAt: v.createdAt,
     expiresAt: v.expiresAt,
-    sealed: isSealed(v),
+    sealed: isSealed(v, vaultId),
     heartbeat: hb ? { key: hb.key, expiresAt: hb.expiresAt, owner: hb.owner, createdAt: hb.createdAt } : null,
     lastBeat: lastBeat ? { key: lastBeat.key, createdAt: lastBeat.createdAt, payload: lastBeat.payload } : null,
     envelopes,
@@ -52041,7 +52045,7 @@ function printVault(v) {
   if (v.status.blocksToDue !== null) log(`due in     ${blocks(v.status.blocksToDue)}   stops in ${blocks(v.status.blocksToLapse)}`);
   log(`rhythm     every ${fmt(m.interval_s)}, grace ${fmt(m.grace_s)}`);
   log(`release    ${m.k} of ${m.n} custodians, ${m.release.mode}`);
-  log(`sealed     ${v.sealed ? "yes: read-only, owned by 0x\u2026dEaD" : "NO"}`);
+  log(`sealed     ${v.sealed ? "yes: read-only, owned by an address nobody holds" : "NO"}`);
   for (const c of m.custodians) {
     const ack = v.acks.find((a) => a.slot === c.slot);
     const rel = v.releases.find((r) => r.slot === c.slot && r.valid);

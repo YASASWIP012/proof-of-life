@@ -1,6 +1,6 @@
 // Re-checks the friction report against the live network with no wallet, no key and no .env: `npm run friction`.
 // Each line prints what the docs led us to expect, what the network does today, and whether the finding still holds.
-// F2, F3 and F7 need a funded wallet; they reproduce with `npx tsx scripts/probe.ts unfunded|lifetime|ws`.
+// F2 and F3 need a funded wallet; they reproduce with `npx tsx scripts/probe.ts unfunded|lifetime` (D2, the missing expiry event, with `ws`).
 import { publicClient } from "@proof-of-life/core";
 
 const RPC = process.env.ARKIV_RPC ?? "https://rpc.tiramisu.db-chain.testnet.arkiv.network";

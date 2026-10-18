@@ -6,7 +6,7 @@ Every entry below is something we reproduced ourselves on 17 October 2026, with 
 - Tiramisu testnet, chain `7738577`, `https://rpc.tiramisu.db-chain.testnet.arkiv.network` with an access key in the path (except where an entry says keyless)
 - Probe scripts are in [`scripts/probe.ts`](../scripts/probe.ts) and [`scripts/e2e.ts`](../scripts/e2e.ts). They need `POL_MNEMONIC` in `.env` (`npx tsx scripts/gen-wallets.ts` makes one) and a funded publisher wallet (`npx tsx scripts/fund.ts`).
 
-**Re-check it yourself, no wallet needed:** `npm install && npm run friction` re-runs F1, F5 and F6 against the live network and prints expected, actual, and whether each finding still holds. F2, F3 and F7 need a funded wallet and reproduce with the probe commands in each entry.
+**Re-check it yourself, no wallet needed:** `npm install && npm run friction` re-runs F1, F5 and F6 against the live network and prints expected, actual, and whether each finding still holds. F2 and F3 need a funded wallet and reproduce with the probe commands in each entry.
 
 Problems come first, then paths we tested that worked, documented with the same rigour. Measured costs are at the end.
 
@@ -89,15 +89,6 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 - **Why it matters:** "let it expire" is not "delete it". For products that rely on expiry for privacy, the data stays readable to anyone who asks for an old block. For us it is harmless only because everything we store is ciphertext or public by design; we now say so in the app and in [`schema.md`](schema.md).
 - **What would fix it:** a sentence in the expiry docs that expired entities remain readable at earlier blocks, and the actual retention window for Tiramisu.
 
-### F7. No event fires when an entity expires
-
-- **Surface:** `watchEntityEvents` (documented in Live Events).
-- **Expected (for a dead man's switch):** an event when the heartbeat expires, since that is the one moment the product exists for.
-- **Actual:** as documented, nothing fires. In `scripts/probe.ts ws` an entity created with a 20-second life produced `created 692428` and `extended 692430` and nothing at expiry, while a sibling's deletion did fire `deleted 692435`. A deleted heartbeat (forced deletion) therefore surfaces at once, while a lapsed one surfaces only when someone looks.
-- **Repro:** `npx tsx scripts/probe.ts ws`.
-- **Our workaround:** pages and the CLI set a timer from the heartbeat's own `$expiresAt` (re-armed in steps past the 24.8-day `setTimeout` limit), then confirm with one query ([`events.ts`](../packages/core/src/arkiv/events.ts)). A custodian who runs no watcher learns of a lapse only by opening the vault page.
-- **What would fix it:** a synthetic `EntityExpired` event, or `arkiv_expiringBetween(from, to)` so a watcher can catch up after downtime.
-
 ## Paths we tested that worked
 
 ### W1. Sealing in the creating transaction with `predictEntityKeys` + `ownershipChanges`
@@ -147,6 +138,15 @@ These match the docs, so they are not defects. We list what we expected, what we
 - **Actual:** the docs are right that a key in the page can be stolen. That leaves two options: read keyless and risk running out mid-demo, or run a relay with a key and add the server the app exists to avoid.
 - **What we did:** we designed for the budget. A vault page costs **one query** (W6) and the directory three. Reads go direct by default; on a rate-limit style failure the app retries once through a small allowlisted relay ([`api/rpc.ts`](../api/rpc.ts)), and the footer says which path is in use. The CLI and curl recipes never use the relay.
 - **What would fix it:** an origin-locked "publishable" key that is meant to be public, or a per-origin browser quota.
+
+### D2. No event fires when an entity expires (documented; what it costs a dead man's switch)
+
+- **Surface:** `watchEntityEvents` (documented in Live Events).
+- **Expected (for a dead man's switch):** an event when the heartbeat expires, since that is the one moment the product exists for.
+- **Actual:** as documented, nothing fires. In `scripts/probe.ts ws` an entity created with a 20-second life produced `created 692428` and `extended 692430` and nothing at expiry, while a sibling's deletion did fire `deleted 692435`. A deleted heartbeat (forced deletion) therefore surfaces at once, while a lapsed one surfaces only when someone looks.
+- **Repro:** `npx tsx scripts/probe.ts ws`.
+- **Our workaround:** pages and the CLI set a timer from the heartbeat's own `$expiresAt` (re-armed in steps past the 24.8-day `setTimeout` limit), then confirm with one query ([`events.ts`](../packages/core/src/arkiv/events.ts)). A custodian who runs no watcher learns of a lapse only by opening the vault page.
+- **What would fix it:** a synthetic `EntityExpired` event, or `arkiv_expiringBetween(from, to)` so a watcher can catch up after downtime.
 
 ## Measured costs (Tiramisu, 17 October 2026)
 

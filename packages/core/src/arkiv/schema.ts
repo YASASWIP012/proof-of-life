@@ -10,6 +10,16 @@ export const PROJECT = "proof-of-life";
 export const SCHEMA_VERSION = 1;
 /** Sealed entities are handed to this address. Nobody holds its key, so nobody can delete them. */
 export const SEAL_ADDRESS = "0x000000000000000000000000000000000000dEaD" as const;
+
+/**
+ * Where a vault's sealed entities go. Listed vaults use the well-known 0x…dEaD. An unlisted vault gets its own
+ * address, the last 20 bytes of sha256("proof-of-life/seal/v1" ‖ vault_id): nobody holds its key either, but it
+ * is unique to the vault and only computable from the vault id, so `$owner = addr(0x…dEaD)` does not list it.
+ */
+export function sealOwner(vaultId: Hex, listed: boolean): Hex {
+  if (listed) return SEAL_ADDRESS;
+  return `0x${bytesToHex(sha256(concat(utf8("proof-of-life/seal/v1"), hexToBytes(vaultId)))).slice(-40)}` as Hex;
+}
 export const BLOCK_SECONDS = 2;
 
 export const KINDS = ["vault", "chunk", "envelope", "heartbeat", "beat", "ack", "release"] as const;

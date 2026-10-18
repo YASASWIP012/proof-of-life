@@ -1,7 +1,7 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { describe, expect, it } from "vitest";
 import {
-  attrs, beatPayload, bytesToHex, classifyToken, kindOf, kindTag, newBeatTokens, openKeyBackup, randomBytes, readBeatToken, sealBlob,
+  attrs, beatPayload, sealOwner, SEAL_ADDRESS, bytesToHex, classifyToken, kindOf, kindTag, newBeatTokens, openKeyBackup, randomBytes, readBeatToken, sealBlob,
   utf8, wrapKey, BEAT_SLOT_BYTES,
 } from "../src/index.js";
 
@@ -26,6 +26,15 @@ describe("unlisted vaults leave nothing to enumerate", () => {
       expect(Object.keys(a)).not.toContain("project");
       for (const k of ["k", "n", "idx", "slot", "interval_s", "grace_s", "sealed_at_ms", "chunks", "mode", "v"]) expect(Object.keys(a)).not.toContain(k);
     }
+  });
+
+  it("seals to the vault's own unspendable address, so an owner query for 0x…dEaD misses it", () => {
+    const other = bytesToHex(randomBytes(32));
+    expect(sealOwner(vaultId, true)).toBe(SEAL_ADDRESS);
+    expect(sealOwner(vaultId, false)).toMatch(/^0x[0-9a-f]{40}$/);
+    expect(sealOwner(vaultId, false)).not.toBe(SEAL_ADDRESS.toLowerCase());
+    expect(sealOwner(vaultId, false)).toBe(sealOwner(vaultId, false));
+    expect(sealOwner(vaultId, false)).not.toBe(sealOwner(other, false));
   });
 
   it("hashes the type with the vault id, so the same kind differs between vaults", () => {
