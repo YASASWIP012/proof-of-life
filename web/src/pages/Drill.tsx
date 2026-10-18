@@ -95,7 +95,7 @@ export default function Drill() {
       }, (p) => p.txHash && add({ text: p.stage === "chunks" ? `Ciphertext chunk ${p.done}/${p.total} written and sealed` : "Manifest, 3 envelopes and the heartbeat written in one batch", tx: p.txHash }));
       vaultRef.current = { vaultId: sealed.vaultId, creator: activist.account.address, heartbeatKey: res.heartbeatKey };
 
-      const acks = await Promise.all(custodians.map((c) => ackCustody(c.wallet, { vaultId: sealed.vaultId, slot: custodians.indexOf(c) + 1 })));
+      const acks = await Promise.all(custodians.map((c) => ackCustody(c.wallet, { vaultId: sealed.vaultId, slot: custodians.indexOf(c) + 1, listed: true })));
       acks.forEach((a, i) => add({ text: `${custodians[i].name} confirmed custody`, tx: a.txHash }));
       await refresh();
       setStage("live");
@@ -111,7 +111,7 @@ export default function Drill() {
     const v = vaultRef.current!;
     setBusy(true);
     try {
-      const beat = { vaultId: v.vaultId, payload: beatPayload(v.vaultId, a.custodians.map((c) => c.pubkey), tokens.current.ok) };
+      const beat = { vaultId: v.vaultId, payload: beatPayload(v.vaultId, a.custodians.map((c) => c.pubkey), tokens.current.ok), listed: true };
       const r = await checkIn(a.activist.wallet, { heartbeatKey: v.heartbeatKey, intervalS: INTERVAL, graceS: GRACE, beat });
       add({ text: "Activist checked in", tx: r.txHash, tone: "ok" });
       await refresh();

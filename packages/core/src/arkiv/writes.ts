@@ -143,7 +143,7 @@ export async function checkIn(
   const life = ExpirationTime.fromSeconds(evenSeconds(p.intervalS + p.graceS));
   return wallet.executeBatch({
     creates: p.beat
-      ? [{ payload: p.beat.payload, contentType: BIN, attributes: attrs.beat(p.beat.vaultId, p.beat.listed ?? true), expires: life, flags: { readonly: true, permissionlessExtension: false } }]
+      ? [{ payload: p.beat.payload, contentType: BIN, attributes: attrs.beat(p.beat.vaultId, p.beat.listed ?? false), expires: life, flags: { readonly: true, permissionlessExtension: false } }]
       : undefined,
     extensions: [
       { entityKey: p.heartbeatKey, expires: life },
@@ -159,7 +159,7 @@ export async function ackCustody(wallet: WalletClient, p: { vaultId: Hex; slot: 
   return wallet.createEntity({
     payload: new Uint8Array(),
     contentType: BIN,
-    attributes: attrs.ack(p.vaultId, p.slot, p.listed ?? true),
+    attributes: attrs.ack(p.vaultId, p.slot, p.listed ?? false),
     expires,
     flags: { readonly: true, permissionlessExtension: false },
   });

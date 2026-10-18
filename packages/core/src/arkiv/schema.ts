@@ -43,7 +43,7 @@ export function kindOf(type: string, vaultId: Hex): Kind | null {
  * Unlisted vaults (the default for real use) carry only `vault_id` and a hashed `type`. Everything else lives in
  * the encrypted manifest or is derived from it, so there is nothing to range over and nothing to enumerate.
  */
-export const base = (kind: Kind, vaultId: Hex, listed = true): AttributeInputs =>
+export const base = (kind: Kind, vaultId: Hex, listed: boolean): AttributeInputs =>
   listed
     ? { project: str(PROJECT), v: i32(SCHEMA_VERSION), type: str(kind), vault_id: bytes32(vaultId) }
     : { type: str(kindTag(vaultId, kind)), vault_id: bytes32(vaultId) };
@@ -60,17 +60,17 @@ export const attrs = {
     sealed_at_ms: u64(BigInt(p.sealedAtMs)),
   }),
   // Unlisted chunks carry no index: readers order them by matching each payload's hash to the manifest's list.
-  chunk: (vaultId: Hex, idx: number, listed = true) => (listed ? { ...base("chunk", vaultId), idx: i32(idx) } : base("chunk", vaultId, false)),
+  chunk: (vaultId: Hex, idx: number, listed: boolean) => (listed ? { ...base("chunk", vaultId, true), idx: i32(idx) } : base("chunk", vaultId, false)),
   // The custodian address stays, so a custodian can find its envelopes; the slot comes from the manifest.
-  envelope: (vaultId: Hex, slot: number, custodian: Hex, listed = true) => (listed ? { ...base("envelope", vaultId), slot: i32(slot), custodian: addr(custodian) } : { ...base("envelope", vaultId, false), custodian: addr(custodian) }),
-  heartbeat: (vaultId: Hex, intervalS: number, graceS: number, listed = true) => !listed ? base("heartbeat", vaultId, false) : ({
+  envelope: (vaultId: Hex, slot: number, custodian: Hex, listed: boolean) => (listed ? { ...base("envelope", vaultId, true), slot: i32(slot), custodian: addr(custodian) } : { ...base("envelope", vaultId, false), custodian: addr(custodian) }),
+  heartbeat: (vaultId: Hex, intervalS: number, graceS: number, listed: boolean) => !listed ? base("heartbeat", vaultId, false) : ({
     ...base("heartbeat", vaultId, listed),
     interval_s: u64(BigInt(intervalS)),
     grace_s: u64(BigInt(graceS)),
   }),
-  ack: (vaultId: Hex, slot: number, listed = true) => (listed ? { ...base("ack", vaultId), slot: i32(slot) } : base("ack", vaultId, false)),
+  ack: (vaultId: Hex, slot: number, listed: boolean) => (listed ? { ...base("ack", vaultId, true), slot: i32(slot) } : base("ack", vaultId, false)),
   /** One per check-in. Its payload carries an encrypted ok/duress flag for each custodian. */
-  beat: (vaultId: Hex, listed = true) => base("beat", vaultId, listed),
+  beat: (vaultId: Hex, listed: boolean) => base("beat", vaultId, listed),
   /**
    * A release always carries the project tag and the vault's creator, even for an unlisted vault: a vault stays
    * hidden while it is alive, and becomes findable from the chain alone the moment its evidence is out.

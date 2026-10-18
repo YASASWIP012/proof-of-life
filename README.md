@@ -33,11 +33,11 @@ Today an activist's protection is a folder on a laptop, a copy with a friend, or
 ## What changes for them
 
 - **The evidence cannot be destroyed.** Files are encrypted in the activist's browser and written to Arkiv. Every encrypted piece is read-only and handed, in the same transaction, to an address nobody holds. Not the activist under duress, not us under a court order, not anyone can delete it.
-- **Silencing the activist releases the evidence.** The activist checks in on a rhythm they choose (weekly, fortnightly, monthly). If they stop, the heartbeat disappears from Arkiv at its deadline, and their custodians publish their pieces of the key. Once enough are public, anyone's browser can open the documents. Killing the activist no longer buries the findings, which removes the reason to kill.
+- **Silencing the activist releases the evidence.** The activist checks in on a rhythm they choose (weekly, fortnightly, monthly). If they stop, the heartbeat disappears from Arkiv at its deadline, and their custodians publish their pieces of the key. Once enough are public, anyone's browser can open the documents. Killing the activist no longer buries the findings, which takes away one reason to kill, as long as `k` custodians stay free to act.
 - **A forced check-in can still raise the alarm.** An activist can set a duress passphrase. Every check-in carries a small note encrypted to the custodians with a random token; only the custodians know which token means "duress". A forced check-in looks identical on screen, on the public vault page and on the chain (same calldata length, measured), and tells the custodians to release now. The phone never stores a duress flag, and every key has two same-size blobs whether or not a duress passphrase exists.
 - **No single person can betray them.** The key is split among custodians (a journalist, a lawyer, a friend), and any `k` of them together can open the vault. Fewer learn nothing. One unreachable custodian does not block the release.
 - **Editors can check before anything is published.** In newsroom mode the pieces are sealed to one newsroom's key, so its editors read the documents first and decide what to publish.
-- **It works for them today.** A phone browser, no wallet to install, no crypto to buy, in English, हिन्दी and తెలుగు.
+- **It runs in a phone browser today.** No wallet to install, no crypto to buy, every screen in English, हिन्दी and తెలుగు. It runs on Arkiv's testnet, so for now it is a working rehearsal, not a home for real evidence: a real vault needs a network that will still exist in a year (see the testnet note below).
 
 ## How it works
 

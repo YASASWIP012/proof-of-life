@@ -43,7 +43,7 @@ async function seedVault(name: string, slot: number, doc: keyof typeof DEMO_DOCS
     custodians: custodians.map((c) => ({ address: c.address, pubkey: bytesToHex(pub(c.secret)) })),
   }, (p) => p.txHash && console.log(`  ${name} ${p.stage} ${p.done}/${p.total} ${p.txHash}`));
   for (const [i, c] of custodians.entries()) {
-    const r = await ackCustody(walletClient(c, { rpc }), { vaultId: sealed.vaultId, slot: i + 1 });
+    const r = await ackCustody(walletClient(c, { rpc }), { vaultId: sealed.vaultId, slot: i + 1, listed: true });
     console.log(`  ${name} custodian ${i + 1} ack ${r.txHash}`);
   }
   registry[name] = { vaultId: sealed.vaultId, creator: activist.address, activist: activistIdx, custodians: custodianIdx, checkIn };

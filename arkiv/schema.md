@@ -10,7 +10,7 @@ An activist seals documents into a vault and keeps a **heartbeat** entity alive 
 
 **Listed and unlisted.** A listed vault (the demo vaults) carries the attributes in the table below. An unlisted vault, the default for real use, carries only `vault_id`, the hashed `type`, and on envelopes the custodian's one-time address. It has no `project`, no `v`, no `idx`, no `slot` and none of the vault's numbers: `k`, `n`, rhythm and mode live only in the manifest payload, chunk order comes from matching each chunk's hash to the manifest, and a custodian's slot is its position in the manifest. No query on `project`, `type` or a number lists an unlisted vault (verified on Tiramisu: a vault sealed this way is absent from `type = str('vault')`; see friction F5). An unlisted vault is hidden from queries, not invisible: someone who scans every entity on the chain, follows the event stream, or walks the gas tap's transfers can still find entities that carry a `vault_id` and read their manifest, which is plaintext (`k`, `n`, rhythm and the custodians' one-time addresses). That scan never yields the documents, their titles, or who the activist or custodians are, because every key is fresh for each vault. **A release is always public**: it carries `project`, the plain `type = str('release')`, `slot` and `vault_creator`, so a vault that stayed hidden while alive becomes findable from the chain the moment its evidence is out.
 
-Every entity carries these four attributes:
+Every entity of a **listed** vault carries these four attributes (an unlisted vault's entities carry only `type`, hashed, and `vault_id`, as above):
 
 | Attribute | Type | Value |
 |---|---|---|
@@ -98,6 +98,8 @@ Readers (web app, CLI, any third party) apply these rules. Anything that fails i
 | Listed vaults for the directory, every page walked with the cursor pinned to one block | `project = str('proof-of-life') AND type = str('vault')`, plus the same for `heartbeat` and `release` | `listVaults` |
 | Vaults about to stop (directory filter "Stops within 3 days", `vaults --stops-within 3d`) | `project = str('proof-of-life') AND type = str('heartbeat') AND $expiresAt <= u64(head + 129600)`, a range on the heartbeat's own expiry | `listVaults({ stopsWithinS })` |
 | Vaults with a slow rhythm (filter "Weekly check-in or slower", `--rhythm-at-least 7d`) | `project = str('proof-of-life') AND type = str('vault') AND interval_s >= u64(604800)` | `listVaults({ rhythmAtLeastS })` |
+
+The two range filters cover **listed** vaults only, on purpose. An unlisted vault carries no number to range over, which is exactly what keeps it out of every such query. A custodian or activist who holds an unlisted vault's id reads its deadline straight from the heartbeat's `$expiresAt` in the one-query vault load.
 | One activist key's own vaults, listed or not (check-in page) | `$creator = addr(key)`, kinds recognised by `kindOf` | `listVaults` |
 | Envelopes addressed to one custodian key | `custodian = addr(A)`, kinds recognised by `kindOf` | `envelopesFor` |
 | Is this heartbeat alive? | `… AND type = str('heartbeat') AND $creator = addr(C)` and compare `$expiresAt` with the head | vault page "Check this without us" panel |
@@ -144,7 +146,7 @@ Expiry is not erasure: Arkiv keeps history, and an expired entity can still be r
 |---|---|
 | Plaintext documents, titles, notes, file names | Everything on Arkiv is public. Only ciphertext goes up |
 | Private keys and passphrases | Keys live in the browser as passphrase-sealed blobs (scrypt + AES-256-GCM) that hide even the key's address and role; backups are the same blobs |
-| Who the activist and custodians are | Custodians use a fresh key per vault; nothing on chain names anyone |
+| Who the activist and custodians are | The app makes a fresh key for every vault, for activists and custodians alike; nothing on chain names anyone. One honest exception: our outside pilot custodian used the same custodian key for `pilot` and `pilot-2`, so those two vaults are visibly linked through it |
 | How to contact anyone | Custodians reach the activist through their own channels |
 | Gas funding | A small serverless tap sends test GLM to fresh keys after a proof of work. It never sees a key, a document, a vault or (in its code) an IP address |
 
