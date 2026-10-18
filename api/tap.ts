@@ -2,9 +2,10 @@
 import { createPublicClient, createWalletClient, http, isAddress, parseEther, formatEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { tiramisu } from "@arkiv-network/sdk/chains";
-import { clientIp, cors, keyedRpc, limiter } from "./_lib.js";
+import { cors, keyedRpc, limiter, powValid } from "./_lib.js";
 
-const perIp = limiter(12, 60 * 60 * 1000);
+// No per-IP limit: the caller proves a little work instead, so the tap never pairs an IP with the key it funds.
+const overall = limiter(400, 60 * 60 * 1000);
 const perAddress = limiter(3, 60 * 60 * 1000);
 const GRANT = parseEther("0.06");
 const ENOUGH = parseEther("0.05");
@@ -16,7 +17,8 @@ export default async function handler(req: any, res: any) {
   const address = String(req.body?.address ?? "");
   if (!isAddress(address)) return res.status(400).json({ error: "not an address" });
   if (!process.env.GAS_TAP_KEY) return res.status(503).json({ error: "gas tap is not configured" });
-  if (!perIp(clientIp(req)) || !perAddress(address.toLowerCase())) return res.status(429).json({ error: "the gas tap is resting; try again in an hour" });
+  if (!powValid(address, req.body?.nonce)) return res.status(400).json({ error: "missing or wrong proof of work; reload the page" });
+  if (!perAddress(address.toLowerCase()) || !overall("all")) return res.status(429).json({ error: "the gas tap is resting; try again in an hour" });
 
   const transport = http(keyedRpc());
   const reader = createPublicClient({ chain: tiramisu, transport });

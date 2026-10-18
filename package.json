@@ -10,7 +10,8 @@
   "scripts": {
     "test": "npm run test -w packages/core",
     "build": "npm run build -w web",
-    "dev": "npm run dev -w web"
+    "dev": "npm run dev -w web",
+    "friction": "tsx scripts/friction-check.ts"
   },
   "bin": {
     "proof-of-life": "cli/dist/proof-of-life.mjs"

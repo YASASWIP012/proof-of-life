@@ -6,6 +6,8 @@ Every entry below is something we reproduced ourselves on 17 October 2026, with 
 - Tiramisu testnet, chain `7738577`, `https://rpc.tiramisu.db-chain.testnet.arkiv.network` with an access key in the path (except where an entry says keyless)
 - Probe scripts are in [`scripts/probe.ts`](../scripts/probe.ts) and [`scripts/e2e.ts`](../scripts/e2e.ts). They need `POL_MNEMONIC` in `.env` (`npx tsx scripts/gen-wallets.ts` makes one) and a funded publisher wallet (`npx tsx scripts/fund.ts`).
 
+**Re-check it yourself, no wallet needed:** `npm install && npm run friction` re-runs F1, F5 and F6 against the live network and prints expected, actual, and whether each finding still holds. F2, F3 and F7 need a funded wallet and reproduce with the probe commands in each entry.
+
 Problems come first, then paths we tested that worked, documented with the same rigour. Measured costs are at the end.
 
 ---
@@ -75,7 +77,7 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 - **Expected:** `type = str('vault')` finds this project's vaults.
 - **Actual:** attribute names and values are global. On 18 October at block 725981, `type = str('report')` returned 177 entities, 129 of them another project's; `type = str('heartbeat')` returned 28, 23 of them without our project tag. The flip side bit us: our first "unlisted" vaults dropped the project tag but kept `type = str('vault')` and typed numbers like `interval_s`, so a single query listed them anyway (2 of the 14 `type = str('vault')` results are those early vaults).
 - **Repro:** `npx tsx scripts/collisions.ts`.
-- **What we did:** every read filters by `project`, `vault_id` or `$creator`. Unlisted vaults now store only `vault_id` and a `type` hashed with the vault id ([`schema.ts`](../packages/core/src/arkiv/schema.ts) `kindTag`), with all numbers inside the encrypted manifest, so nothing can be listed without the link.
+- **What we did:** every read filters by `project`, `vault_id` or `$creator`. Unlisted vaults now store only `vault_id` and a `type` hashed with the vault id ([`schema.ts`](../packages/core/src/arkiv/schema.ts) `kindTag`), with all numbers only in the manifest payload, so no query on `type`, `project` or a number lists them. A scan of every entity can still find them; [`schema.md`](schema.md) says what such a scan sees.
 - **What would help:** a line in the docs that attribute names and values share one global space, with a recommended namespacing pattern.
 
 ### F6. Expiry hides an entity from current queries but not from history, and the docs say it is gone
@@ -122,7 +124,7 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 
 ### W5. Ownership errors name both addresses
 
-- Wrong-owner writes fail with `entity 0x… is owned by 0x…, not 0x…`. This made the trust tests easy to write, and F3 asks for the same quality everywhere.
+- Wrong-owner writes fail with `entity 0x… is owned by 0x…, not 0x…`. This made the trust tests easy to write, and F2 asks for the same quality everywhere.
 
 ### W6. `NOT (type = …)` loads a whole vault except its ciphertext in one query
 
@@ -155,7 +157,7 @@ These match the docs, so they are not defects. We list what we expected, what we
 | Custodian acknowledgement | 105,384 | 0.00011 |
 | Check-in (extend heartbeat) | 25,180 | 0.000025 |
 | Release (create + seal) | 127,720 | 0.00013 |
-| 32 KiB entity for 1, 30 or 365 days | ~1,340,000 | 0.00134 (F4) |
+| 32 KiB entity for 1, 30 or 365 days | ~1,340,000 | 0.00134 (F3) |
 
 Gas tracks payload size and does not depend on lifetime. A weekly check-in for a year costs about 0.0013 GLM.
 

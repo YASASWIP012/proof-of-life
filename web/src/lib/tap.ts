@@ -3,6 +3,7 @@
 import type { Hex } from "viem";
 import { TAP_URL } from "./config";
 import { read } from "./net";
+import { solveTapWork } from "./pow";
 
 export async function balanceOf(address: Hex): Promise<bigint> {
   return read((c) => c.getBalance({ address }));
@@ -11,7 +12,7 @@ export async function balanceOf(address: Hex): Promise<bigint> {
 export async function ensureGas(address: Hex, min = 2_000_000_000_000_000n): Promise<bigint> {
   const have = await balanceOf(address);
   if (have >= min) return have;
-  const res = await fetch(TAP_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address }) });
+  const res = await fetch(TAP_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address, nonce: await solveTapWork(address) }) });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? `gas tap answered ${res.status}`);
   for (let i = 0; i < 20; i++) {

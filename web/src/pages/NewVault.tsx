@@ -173,7 +173,7 @@ function Form({ account, keyInfo: key }: { account: OpenKey["account"]; keyInfo:
               <input type="checkbox" className="switch mt-1" checked={ownGas} onChange={(e) => setOwnGas(e.target.checked)} />
             </label>
             <label className="flex items-start justify-between gap-4 text-sm">
-              <span><b>List this vault in the public directory</b><br /><span className="text-muted">Off by default. An unlisted vault carries no project tag, so only people with its link can find it.</span></span>
+              <span><b>List this vault in the public directory</b><br /><span className="text-muted">Off by default. An unlisted vault carries no project tag and no plain type, so no search lists it. Someone scanning the whole chain could still spot that a vault exists, never what is in it or whose it is.</span></span>
               <input type="checkbox" className="switch mt-1" checked={listed} onChange={(e) => setListed(e.target.checked)} />
             </label>
           </div>

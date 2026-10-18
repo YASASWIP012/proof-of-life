@@ -8,13 +8,13 @@ An activist seals documents into a vault and keeps a **heartbeat** entity alive 
 
 ## Entity types
 
-**Listed and unlisted.** A listed vault (the demo vaults) carries the attributes in the table below. An unlisted vault, the default for real use, carries only `vault_id`, the hashed `type`, and on envelopes the custodian's one-time address. It has no `project`, no `v`, no `idx`, no `slot` and none of the vault's numbers: `k`, `n`, rhythm and mode live only in the manifest payload, chunk order comes from matching each chunk's hash to the manifest, and a custodian's slot is its position in the manifest. Nothing about an unlisted vault can be enumerated or range-queried without first knowing its `vault_id` (verified on Tiramisu: a vault sealed this way is absent from `type = str('vault')`; see friction F5). **A release is always public**: it carries `project`, the plain `type = str('release')`, `slot` and `vault_creator`, so a vault that stayed hidden while alive becomes findable from the chain the moment its evidence is out.
+**Listed and unlisted.** A listed vault (the demo vaults) carries the attributes in the table below. An unlisted vault, the default for real use, carries only `vault_id`, the hashed `type`, and on envelopes the custodian's one-time address. It has no `project`, no `v`, no `idx`, no `slot` and none of the vault's numbers: `k`, `n`, rhythm and mode live only in the manifest payload, chunk order comes from matching each chunk's hash to the manifest, and a custodian's slot is its position in the manifest. No query on `project`, `type` or a number lists an unlisted vault (verified on Tiramisu: a vault sealed this way is absent from `type = str('vault')`; see friction F5). An unlisted vault is hidden from queries, not invisible: someone who scans every entity on the chain, follows the event stream, or walks the gas tap's transfers can still find entities that carry a `vault_id` and read their manifest, which is plaintext (`k`, `n`, rhythm and the custodians' one-time addresses). That scan never yields the documents, their titles, or who the activist or custodians are, because every key is fresh for each vault. **A release is always public**: it carries `project`, the plain `type = str('release')`, `slot` and `vault_creator`, so a vault that stayed hidden while alive becomes findable from the chain the moment its evidence is out.
 
 Every entity carries these four attributes:
 
 | Attribute | Type | Value |
 |---|---|---|
-| `project` | `str` | `proof-of-life`, **only on listed vaults**. Unlisted vaults (the default) omit it, so nobody can enumerate them through our directory query; they are found by `vault_id`, which only link holders know |
+| `project` | `str` | `proof-of-life`, **only on listed vaults**. Unlisted vaults (the default) omit it, so our directory query and any `type` or range query miss them; the app finds them by `vault_id` from the link |
 | `v` | `i32` | `1` (schema version) |
 | `type` | `str` | listed vaults: one of `vault`, `chunk`, `envelope`, `heartbeat`, `beat`, `ack`, `release`. Unlisted vaults: `x` + the first 12 bytes of `sha256("proof-of-life/kind/v1" ‖ vault_id ‖ kind)` as hex, for every kind except `release` (see below) |
 | `vault_id` | `bytes32` | random 32 bytes chosen in the activist's browser; links every entity of one vault |
@@ -126,7 +126,7 @@ Pages and the CLI watcher subscribe with `watchEntityEvents` over a **WebSocket*
 |---|---|---|
 | Anyone reading Arkiv | for a vault whose link they hold: ciphertext sizes, `k` and `n`, rhythm, the heartbeat deadline, check-in times, one-time custodian addresses, which slots released | names, titles, file names, document contents, which vaults belong to the same person (each vault is sealed by a fresh activist key) |
 | The Arkiv RPC node (and our read relay, when it is used) | the IP address of every read and every check-in, and which vault it touched | contents, names, or whether a check-in was a duress one |
-| The gas tap (our Vercel function) | the fresh address it funds and the request's IP address | keys, documents, vault ids. It keeps no log of its own; the hosting platform's request logs still exist |
+| The gas tap (our Vercel function) | the fresh address it funds. Its code never reads the caller's IP: spam is held off by a proof of work the browser solves ([`api/_lib.ts`](../api/_lib.ts) `powValid`), a per-address limit and an hourly budget | keys, documents, vault ids. It keeps no log of its own. The hosting platform still sees the request's IP in its own logs, and the tap's transfers are public, so every key it funds is visibly a Proof of Life key. For a real vault, the app's "own gas" option funds the key from elsewhere |
 | Someone holding the activist's phone | a list of passphrase-sealed blobs | addresses, roles, labels and vaults. Vaults are not stored on the phone; the app finds them on Arkiv after unlocking |
 | Someone forcing a check-in | a normal check-in, on the phone, on the vault page and on chain | that the duress passphrase was used: the key blob looks like any other, and the check-in note has the same size and shape as a normal one |
 
@@ -140,7 +140,7 @@ Expiry is not erasure: Arkiv keeps history, and an expired entity can still be r
 | Private keys and passphrases | Keys live in the browser as passphrase-sealed blobs (scrypt + AES-256-GCM) that hide even the key's address and role; backups are the same blobs |
 | Who the activist and custodians are | Custodians use a fresh key per vault; nothing on chain names anyone |
 | How to contact anyone | Custodians reach the activist through their own channels |
-| Gas funding | A small serverless tap sends test GLM to fresh keys. It never sees a key, a document or a vault |
+| Gas funding | A small serverless tap sends test GLM to fresh keys after a proof of work. It never sees a key, a document, a vault or (in its code) an IP address |
 
 ## Wallets that write for this project
 
