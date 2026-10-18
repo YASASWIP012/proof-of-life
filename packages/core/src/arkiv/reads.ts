@@ -345,7 +345,8 @@ export async function extendableKeys(client: PublicClient, view: VaultView, who:
     .map((e) => ({ key: e.key, expiresAt: e.expiresAt }));
 }
 
-export type RtiView = { record: RtiRecord | null; rejected: { key: Hex; reason: string }[]; head: bigint; expired: boolean; createdMs: number | null; dueMs: number | null };
+/** `duePassed`: the reply deadline (the payload's due block) is behind the head. `expired`: the appeal windows have closed too. */
+export type RtiView = { record: RtiRecord | null; rejected: { key: Hex; reason: string }[]; head: bigint; duePassed: boolean; expired: boolean; createdMs: number | null; dueMs: number | null };
 
 /**
  * Finds the timestamp record for a commitment (from the filer's receipt or link). While it lives, one query finds
@@ -356,8 +357,8 @@ export async function loadRti(client: PublicClient, commitment: Hex, opts: { atB
   const q = client.select({ key: true, owner: true, creator: true, createdAt: true, expiresAt: true, creationFlags: true, payload: true }).where(eq("type", str(rtiTag(commitment)))).limit(50);
   const { rows } = await fetchAll<RtiRow>(q as unknown as Pageable, { atBlock: opts.atBlock !== undefined && opts.atBlock < head ? opts.atBlock : undefined });
   const { record, rejected } = assembleRti(rows, commitment);
-  if (!record) return { record, rejected, head, expired: false, createdMs: null, dueMs: null };
+  if (!record) return { record, rejected, head, duePassed: false, expired: false, createdMs: null, dueMs: null };
   const block = await client.getBlock({ blockNumber: record.createdAt });
   const createdMs = Number(block.timestamp) * 1000;
-  return { record, rejected, head, expired: record.expiresAt <= head, createdMs, dueMs: createdMs + Number(record.expiresAt - record.createdAt) * BLOCK_SECONDS * 1000 };
+  return { record, rejected, head, duePassed: record.dueBlock <= head, expired: record.expiresAt <= head, createdMs, dueMs: createdMs + Number(record.dueBlock - record.createdAt) * BLOCK_SECONDS * 1000 };
 }

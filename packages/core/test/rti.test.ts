@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assembleRti, bytesToHex, checkRtiReceipt, randomBytes, rtiClock, rtiCommitment, rtiSealOwner, rtiTag, sha256Hex, utf8, type RtiReceipt, type RtiRow } from "../src/index.js";
+import { assembleRti, bytesToHex, checkRtiReceipt, RTI_APPEAL_DAYS, rtiExpiryBlock, randomBytes, rtiClock, rtiCommitment, rtiSealOwner, rtiTag, sha256Hex, utf8, type RtiReceipt, type RtiRow } from "../src/index.js";
 
 const jsonPayload = (v: unknown) => utf8(JSON.stringify(v));
 
@@ -46,7 +46,7 @@ describe("RTI record", () => {
     owner: rtiSealOwner(commitment),
     creator: "0x1111111111111111111111111111111111111111",
     createdAt: 100n,
-    expiresAt: 1_396_900n,
+    expiresAt: rtiExpiryBlock(1_396_900n),
     creationFlags: { readonly: true, permissionlessExtension: false },
     payload: jsonPayload(o.body ?? { v: 2, commitment, due_block: "1396900" }),
     ...o,
@@ -75,21 +75,26 @@ describe("RTI record", () => {
     expect(checkRtiReceipt(receipt, sha256Hex(utf8("a different application"))).matchesFile).toBe(false);
     expect(checkRtiReceipt({ ...receipt, salt: bytesToHex(randomBytes(32)) }, fileHash)).toEqual({ consistent: false, matchesFile: false });
   });
+  it("lives through the appeal windows: 30 + 45 + 90 days after the reply is due, s.19(1), s.19(6), s.19(3)", () => {
+    expect(RTI_APPEAL_DAYS).toBe(165);
+    expect(rtiExpiryBlock(1_000n)).toBe(1_000n + 165n * 43_200n);
+  });
   it("accepts a sealed record and keeps the earliest", () => {
     const late = row({ createdAt: 500n });
     const early = row({ createdAt: 120n });
     expect(assembleRti([late, early], commitment).record?.createdAt).toBe(120n);
   });
-  it("rejects records that are not sealed, name another commitment, expire elsewhere, or use the old format", () => {
+  it("rejects records that are not sealed, name another commitment, expire elsewhere (even at the due block itself), or use the old format", () => {
     const rows = [
       row({ owner: "0x2222222222222222222222222222222222222222" }),
       row({ creationFlags: { readonly: false, permissionlessExtension: false } }),
       row({ body: { v: 2, commitment: other, due_block: "1396900" } }),
       row({ expiresAt: 999n }),
+      row({ expiresAt: 1_396_900n }),
       row({ body: { v: 1, sha256: fileHash, due_block: "1396900" } }),
     ];
     const { record, rejected } = assembleRti(rows, commitment);
     expect(record).toBeNull();
-    expect(rejected).toHaveLength(5);
+    expect(rejected).toHaveLength(6);
   });
 });

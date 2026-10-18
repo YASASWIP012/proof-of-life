@@ -175,7 +175,7 @@ export default function Rti() {
 
   const rec = view?.record ?? null;
   const match = receipt && fileHash ? checkRtiReceipt(receipt, fileHash).matchesFile : null;
-  const overdue = passed || !!view?.expired;
+  const overdue = passed || !!view?.duePassed;
   const withTime = kind === "life";
 
   return (
@@ -274,7 +274,7 @@ export default function Rti() {
               {t("rti_rec_by", { block: rec.createdAt.toString(), time: view.createdMs ? fmt(view.createdMs, lang, true) : "", addr: short(rec.creator) })}{" "}
               <a className="underline decoration-dotted underline-offset-2" href={explorerAddress(rec.creator)} target="_blank" rel="noreferrer">↗</a>
             </p>
-            <p>{view.expired ? t("rti_rec_gone", { block: rec.expiresAt.toString(), at: (atBlock ?? rec.createdAt).toString() }) : t("rti_rec_live", { block: rec.expiresAt.toString() })}</p>
+            <p>{view.expired ? t("rti_rec_gone", { block: rec.expiresAt.toString(), at: (atBlock ?? rec.createdAt).toString() }) : t("rti_rec_live", { block: rec.expiresAt.toString(), due: rec.dueBlock.toString() })}</p>
             <p className="text-muted">{t("rti_rec_commit")} <span className="t-mono mono-wrap text-[12px]">{commitment}</span></p>
             {tx && <p>{t("rti_rec_tx")}: <TxLink hash={tx} /></p>}
             {receipt && receipt.commitment === commitment ? (

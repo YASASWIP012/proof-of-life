@@ -6,6 +6,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, concat, hexToBytes, utf8 } from "../crypto/bytes.js";
 import type { AttributeInputs } from "@arkiv-network/sdk";
 import type { Hex } from "../crypto/bytes.js";
+import { BLOCK_SECONDS } from "./schema.js";
 
 export type RtiKind = "normal" | "life";
 
@@ -36,6 +37,14 @@ export type RtiClock = {
 };
 
 const DAY = 86_400_000;
+
+/**
+ * How long a filing record outlives the reply deadline: the whole appeal path, so it is still there when the filer
+ * needs it. 30 days to file the First Appeal (s.19(1)), 45 days at most for its decision (s.19(6)), then 90 days for
+ * the second appeal (s.19(3)).
+ */
+export const RTI_APPEAL_DAYS = 30 + 45 + 90;
+export const rtiExpiryBlock = (dueBlock: bigint): bigint => dueBlock + BigInt((RTI_APPEAL_DAYS * DAY) / 1000 / BLOCK_SECONDS);
 
 /** End of the local calendar day `days` after `ms`. The day of receipt itself is not counted. */
 function endOfDayAfter(ms: number, days: number): number {
@@ -121,7 +130,8 @@ export type RtiRecord = { key: Hex; creator: Hex; createdAt: bigint; expiresAt: 
 
 /**
  * Pure, so the trust rules can be tested without a network. A row counts only if it is read-only, sealed to the
- * record's own address, names the same commitment, and expires at the block it names. The earliest valid row wins.
+ * record's own address, names the same commitment, and expires when the appeal windows after its due block close.
+ * The earliest valid row wins.
  */
 export function assembleRti(rows: RtiRow[], commitment: Hex): { record: RtiRecord | null; rejected: { key: Hex; reason: string }[] } {
   const rejected: { key: Hex; reason: string }[] = [];
@@ -137,7 +147,7 @@ export function assembleRti(rows: RtiRow[], commitment: Hex): { record: RtiRecor
     }
     if (p.commitment !== commitment.toLowerCase()) rejected.push({ key: r.key, reason: "names a different commitment" });
     else if (!r.creationFlags.readonly || r.owner.toLowerCase() !== seal) rejected.push({ key: r.key, reason: "not sealed: its owner could change or delete it" });
-    else if (BigInt(p.due_block) !== r.expiresAt) rejected.push({ key: r.key, reason: "expires at a different block than it names" });
+    else if (rtiExpiryBlock(BigInt(p.due_block)) !== r.expiresAt) rejected.push({ key: r.key, reason: "does not live through the appeal windows after the block it names" });
     else valid.push({ key: r.key, creator: r.creator, createdAt: r.createdAt, expiresAt: r.expiresAt, dueBlock: BigInt(p.due_block) });
   }
   valid.sort((a, b) => Number(a.createdAt - b.createdAt));

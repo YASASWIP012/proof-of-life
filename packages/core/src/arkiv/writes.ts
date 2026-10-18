@@ -5,7 +5,7 @@ import { bytesToHex } from "../crypto/bytes.js";
 import type { SealedVault } from "../crypto/vault.js";
 import type { PublicClient, WalletClient } from "./client.js";
 import { attrs, BLOCK_SECONDS, evenSeconds, LIFETIME, Manifest, SEAL_ADDRESS, sealOwner, type ReleaseMode, type ReleasePayload } from "./schema.js";
-import { rtiAttrs, rtiSealOwner, type RtiPayload } from "./rti.js";
+import { rtiAttrs, rtiExpiryBlock, rtiSealOwner, type RtiPayload } from "./rti.js";
 
 const SEALED = { readonly: true, permissionlessExtension: true } as const;
 const BIN = "application/octet-stream";
@@ -192,8 +192,9 @@ export async function keepAlive(wallet: WalletClient, keys: Hex[], days: number 
 
 /**
  * Timestamps an RTI application: one read-only entity whose payload is a salted commitment to the application
- * (see rtiCommitment) and the block its reply is due. It expires exactly at that block and is handed to the
- * record's own seal address in the same transaction, so nobody can change, extend or delete it.
+ * (see rtiCommitment) and the block its reply is due. It expires when the last appeal window after that block closes
+ * (rtiExpiryBlock), and is handed to the record's own seal address in the same transaction, so nobody can change,
+ * extend or delete it.
  */
 export async function recordRti(wallet: WalletClient, reader: PublicClient, p: { commitment: Hex; dueMs: number; nowMs?: number }) {
   const head = await reader.getBlockNumber();
@@ -203,7 +204,7 @@ export async function recordRti(wallet: WalletClient, reader: PublicClient, p: {
   const r = await sealedBatch(
     wallet,
     reader,
-    [{ payload: jsonToPayload(payload), contentType: JSON_T, attributes: rtiAttrs(p.commitment), expires: ExpirationTime.atBlock(dueBlock), flags: { readonly: true, permissionlessExtension: false } }],
+    [{ payload: jsonToPayload(payload), contentType: JSON_T, attributes: rtiAttrs(p.commitment), expires: ExpirationTime.atBlock(rtiExpiryBlock(dueBlock)), flags: { readonly: true, permissionlessExtension: false } }],
     new Set(),
     rtiSealOwner(p.commitment),
   );
