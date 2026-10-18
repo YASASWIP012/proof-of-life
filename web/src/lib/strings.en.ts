@@ -161,7 +161,7 @@ export const en = {
   vl_rel_t: "Released evidence",
   vl_rel_b: "Vaults whose pieces are public. A vault can stay unlisted while its heartbeat beats; every released piece carries the project tag and its vault's creator, so released evidence is findable from the chain alone.",
   vl_pieces: "{n} piece(s) · since block {b}",
-  vl_intro: "Every listed vault on Arkiv, read live. A vault shows only a random id, its custodian count and its heartbeat. Nothing here says who made it or what is inside. Release counts in this list are raw; open a vault to see which pieces pass their checks.",
+  vl_intro: "Every listed vault on Arkiv, read live. A vault shows only a random id, its custodian count and its heartbeat. Nothing here says who made it or what is inside. Release counts include only pieces that pass the vault's checks; forged ones show as ignored.",
   vl_row: "{k} of {n} custodians · {mode} release · by {by}",
   // Key, check-in, custodian and sealing flows
   nv_reused: "One of these invite codes already guards another vault. Reusing it would link your vaults on Arkiv. Ask that custodian for a fresh invite code.",

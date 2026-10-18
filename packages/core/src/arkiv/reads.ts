@@ -357,14 +357,15 @@ export async function listReleased(client: PublicClient): Promise<ReleasedVault[
   const out = await Promise.all(
     [...by.values()].map(async (v) => {
       // One small query per vault: its manifest, written by the vault's creator (listed or unlisted type tag).
+      // Network errors propagate, so a rate-limited read can fall back to the relay instead of counting zero.
+      const page = await client
+        .select({ payload: true, creator: true })
+        .where(eq("vault_id", bytes32(v.vaultId)), or(eq("type", str("vault")), eq("type", str(kindTag(v.vaultId, "vault")))))
+        .createdBy(v.creator)
+        .limit(1)
+        .fetch();
       let manifest: Partial<Manifest> | null = null;
       try {
-        const page = await client
-          .select({ payload: true, creator: true })
-          .where(eq("vault_id", bytes32(v.vaultId)), or(eq("type", str("vault")), eq("type", str(kindTag(v.vaultId, "vault")))))
-          .createdBy(v.creator)
-          .limit(1)
-          .fetch();
         const row = page.entities[0];
         if (row) manifest = JSON.parse(new TextDecoder().decode(row.payload));
       } catch {}

@@ -51860,9 +51860,9 @@ async function listReleased(client) {
   }
   const out = await Promise.all(
     [...by.values()].map(async (v) => {
+      const page = await client.select({ payload: true, creator: true }).where(eq("vault_id", bytes32(v.vaultId)), or(eq("type", str("vault")), eq("type", str(kindTag(v.vaultId, "vault"))))).createdBy(v.creator).limit(1).fetch();
       let manifest = null;
       try {
-        const page = await client.select({ payload: true, creator: true }).where(eq("vault_id", bytes32(v.vaultId)), or(eq("type", str("vault")), eq("type", str(kindTag(v.vaultId, "vault"))))).createdBy(v.creator).limit(1).fetch();
         const row = page.entities[0];
         if (row) manifest = JSON.parse(new TextDecoder().decode(row.payload));
       } catch {
