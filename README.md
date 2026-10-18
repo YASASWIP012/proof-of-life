@@ -16,7 +16,7 @@ Built on [Arkiv](https://arkiv.network), the Web3 database, for **Arkiv: Global 
 | A vault that was released, with a forged piece and a forged heartbeat beside it | [released](https://proof-of-life-khaki.vercel.app/#/v/0xff209ceea0104dab5d737fc1e7d5c740c717832d74af8e8970dafd1cb7077bca/0x126B45be97c649DcA7A44e3eB41e8dacf79436d8) |
 | A vault kept alive by a check-in bot every few hours | [always-alive](https://proof-of-life-khaki.vercel.app/#/v/0x87935a7665533da43c4b562fa4a39951c6fe2a4d3a82a19b24c2aef7bca31dc9/0x8C8adBA31c57C51b4cBAdA5c503826378260e01e) |
 | A vault whose heartbeat stops at **12:00 IST on 21 October**, during judging, and is then released by its custodians | [lapses-oct-21](https://proof-of-life-khaki.vercel.app/#/v/0x612ecb90f7fd74b4c11feeeeaeec9840841be40f5cab2a1d52235af64fd6270d/0x5D40aE116e255576B0D5F1FE706e3a236c59bDF1) |
-| **Pilot-3: the team cannot open it alone.** Two custodians, two needed: an outside person, unnamed by choice, holding a key made on their own phone, and one team key. Both confirmed custody on Arkiv from their own keys on 19 October | [pilot-3](https://proof-of-life-khaki.vercel.app/#/v/0xa9a2b7930838e75fa0d717406ab7b5532aa326c3288c46a699781d6186db8288/0x3fD3b64F26Bc6862941Bb6f7933523f137D9C423) |
+| **Pilot-3: the team cannot open it alone.** Two custodians, two needed: an outside person, unnamed by choice, holding a key made on their own phone, and one team key. Both confirmed custody on Arkiv from their own keys early on 19 October IST, before the challenge closed (23:59 London, 18 October) | [pilot-3](https://proof-of-life-khaki.vercel.app/#/v/0xa9a2b7930838e75fa0d717406ab7b5532aa326c3288c46a699781d6186db8288/0x3fD3b64F26Bc6862941Bb6f7933523f137D9C423) |
 | **Pilot-2: sealed for good.** Two custodians, two needed: an outside person, unnamed by choice, and one demo key. The outside custodian no longer has their key, and a sealed vault's custodian list cannot be edited, so this vault will never open, by us or anyone | [pilot-2](https://proof-of-life-khaki.vercel.app/#/v/0xad33705f0d1b3aa36b45ae52d42b6b78f933544fe056bdfab6c19c4710d07082/0x7C4E28e08183601dB2090Eb3F805c813d89c4B25) |
 | A pilot vault whose slot-1 custodian is an outside person, unnamed by choice, holding a key we never see. They confirmed custody from their own phone | [pilot](https://proof-of-life-khaki.vercel.app/#/v/0x54f8db01e47e3128e19b5ce5e746e8aabea9dc28cddbd8b5bb73431d9384a12f/0xa15eeDe179654Fe9807F39099392E084EDC9143f) |
 | One-file reader: save it anywhere, open a released vault with no site, server or install | [`reader.html`](reader.html) (also at [/reader.html](https://proof-of-life-khaki.vercel.app/reader.html)) |
@@ -118,6 +118,14 @@ Q
 Each row's `vault_id` and `vault_creator` open the vault (`/#/v/<vault_id>/<vault_creator>`); `$creator` must be the custodian named for that slot in the manifest, which every reader checks. The CLI does the same with `proof-of-life released`.
 
 **The vault that stops during judging:** `lapses-oct-21` was sealed on 17 October in transactions [`0x21035f1e…`](https://tiramisu.explorer.arkiv.network/tx/0x21035f1ef9885badcb44f6cd9691b307e43f600d8dab8af0271dca7bea7c6af9) (ciphertext) and [`0xcac01637…`](https://tiramisu.explorer.arkiv.network/tx/0xcac016376c837a7408ee421a3fa05cea971ed1fa7bd872356bb08d9568982366) (manifest, envelopes and heartbeat). Its heartbeat stops at 12:00 IST on 21 October; the keeper's custodians then release it, and the release transactions appear on its page and in the call above.
+
+## Why Censorship Resistance: silencing the activist doesn't silence the papers
+
+Today an RTI activist's papers sit on a laptop someone can seize, with a friend someone can threaten, or in an account someone can close. Here the sealed record is read-only and owned by an address nobody holds, so no court order to us, no pressure on the activist and no takedown of this site removes it. From day one, anyone can read released evidence with the curl call above, [`reader.html`](reader.html) saved to a phone, the CLI, the GitHub Pages [mirror](https://yasaswip012.github.io/proof-of-life/) or [`examples/list-released.mjs`](examples/list-released.mjs), with nothing of ours running. Writing needs nothing of ours either: fund a fresh key from the public [faucet](https://hub.arkiv.network/faucet) and check in with `proof-of-life checkin`, which skips our gas tap entirely; custodians publish with `proof-of-life release` or their own [watcher](examples/custodian-watcher.yml).
+
+## Why Privacy: what the explorer shows
+
+Payloads are ciphertext padded to a 64 KiB bucket; titles, file names and notes live inside it. Each vault has its own activist key and one-time custodian keys, and unlisted vaults (the default) carry only a random id and hashed type tags, so no query lists them. A duress check-in has the same size and shape on chain as a normal one. What stays visible is in the threat model below: the manifest's `k`, `n`, rhythm and custodian addresses, check-in times, and, if the shared gas tap paid for a key, the tap's transfer to it. To leave no tap trail, turn on "Pay gas from my own wallet" when sealing and fund the key from the faucet.
 
 ## Why Security: forged data never counts
 
@@ -223,6 +231,6 @@ Yasaswi Paruchuri (Indian national), KL University. Solo build.
 
 ## Built during the challenge
 
-All code, data and design were made between 9 and 18 October 2026. No pre-existing work; the baseline is the first commit of this repository. Libraries: React, Vite, Tailwind, viem, `@noble/*`, zod, `@arkiv-network/sdk` 0.8.1.
+All code, data and design were made during the challenge, before its close at 23:59 London time on 18 October 2026 (04:29 IST on 19 October), so commits and pilot-3 dated early on 19 October IST fall inside it. No pre-existing work; the baseline is the first commit of this repository, `eb284ce` (17 October), which holds the crypto core and data layer written before the first push. Libraries: React, Vite, Tailwind, viem, `@noble/*`, zod, `@arkiv-network/sdk` 0.8.1.
 
 MIT licensed.

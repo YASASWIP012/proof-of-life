@@ -27,6 +27,8 @@ export function watchVault(
       }
     },
     onEntityCreated: (e) => {
+      // At creation the owner is the writer: a batch applies in order and emits one event per operation, so a seal
+      // to 0x…dEaD in the same batch arrives afterwards as its own OwnershipTransferred event.
       if (watched.has(e.owner.toLowerCase())) onSignal({ kind: "activity", blockNumber: e.blockNumber, txHash: e.transactionHash, from: e.owner });
     },
     onEntityDeleted: (e) => {

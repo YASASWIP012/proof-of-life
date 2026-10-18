@@ -24,7 +24,7 @@ export function dataContract() {
     $id: "https://github.com/YASASWIP012/proof-of-life/blob/main/arkiv/contract.schema.json",
     title: "Proof of Life data contract on Arkiv",
     description:
-      "Every entity Proof of Life writes, its typed attributes, payload and lifetime, and the rules a reader applies. Build another reader, watcher or app from this without asking us. Prose version: arkiv/schema.md.",
+      "Every entity Proof of Life writes, its typed attributes, payload and lifetime, and the rules a reader applies. Build another reader, watcher or app from this without asking us. Prose version: arkiv/schema.md. Versioning: fields are only ever added, never renamed or removed; a breaking change would bump `v`.",
     "x-network": { chainId: TIRAMISU.chainId, rpc: TIRAMISU.rpc, ws: TIRAMISU.ws, sdk: "@arkiv-network/sdk 0.8.x" },
     "x-trust-rules": [
       "A heartbeat, beat, manifest, chunk or envelope counts only if its $creator is the vault's creator.",

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/YASASWIP012/proof-of-life/blob/main/arkiv/contract.schema.json",
   "title": "Proof of Life data contract on Arkiv",
-  "description": "Every entity Proof of Life writes, its typed attributes, payload and lifetime, and the rules a reader applies. Build another reader, watcher or app from this without asking us. Prose version: arkiv/schema.md.",
+  "description": "Every entity Proof of Life writes, its typed attributes, payload and lifetime, and the rules a reader applies. Build another reader, watcher or app from this without asking us. Prose version: arkiv/schema.md. Versioning: fields are only ever added, never renamed or removed; a breaking change would bump `v`.",
   "x-network": {
     "chainId": 7738577,
     "rpc": "https://rpc.tiramisu.db-chain.testnet.arkiv.network",
