@@ -56,7 +56,7 @@ Then chunks, manifest and envelopes are created read-only **without** `permissio
   "k": 2, "n": 3,
   "custodians": [{ "slot": 1, "address": "0x…", "pubkey": "0x02…33 bytes" }],   // one-time keys, one per vault
   "commitments": ["0x…"],          // sha256("proof-of-life/share/v1" ‖ vault_id ‖ share), one per slot
-  "chunks": { "count": 2, "hashes": ["0x…"], "bytes": 120034 },
+  "chunks": { "count": 2, "hashes": ["0x…"], "bytes": 131100 },  // padded: 2 × 65,536 + 28 (nonce and tag)
   "ciphertext_sha256": "0x…",
   "interval_s": 604800, "grace_s": 259200,
   "release": { "mode": "public" },  // or { "mode": "newsroom", "newsroom_pubkey": "0x02…" }
@@ -64,6 +64,8 @@ Then chunks, manifest and envelopes are created read-only **without** `permissio
   "listed": false                    // shown in the public directory or not
 }
 ```
+
+Before encryption the bundle is padded with random filler to the next 64 KiB, so `chunks.bytes` and the chunk sizes on chain are always a multiple of 65,536 plus 28 bytes of nonce and tag. They show which 64 KiB bucket a vault falls in, never the size of a document; each file's real size and hash sit inside the ciphertext ([`crypto/vault.ts`](../packages/core/src/crypto/vault.ts), `sealVault`).
 
 Nothing in the manifest identifies the activist, the custodians or the documents, and it holds no free text at all. Titles, notes, file names and any label the activist uses live inside the ciphertext. (The three demo vaults seeded on 17 October carry a short `tag`; new vaults never write one.)
 
@@ -134,7 +136,7 @@ Pages and the CLI watcher subscribe with `watchEntityEvents` over a **WebSocket*
 
 | Who | What they see | What they do not see |
 |---|---|---|
-| Anyone reading Arkiv | for a vault whose link they hold: ciphertext sizes, `k` and `n`, rhythm, the heartbeat deadline, check-in times, one-time custodian addresses, which slots released | names, titles, file names, document contents, which vaults belong to the same person (each vault is sealed by a fresh activist key) |
+| Anyone reading Arkiv | for a vault whose link they hold: ciphertext size rounded up to a 64 KiB bucket, `k` and `n`, rhythm, the heartbeat deadline, check-in times, one-time custodian addresses, which slots released | names, titles, file names, document contents, which vaults belong to the same person (each vault is sealed by a fresh activist key) |
 | The Arkiv RPC node (and our read relay, when it is used) | the IP address of every read and every check-in, and which vault it touched | contents, names, or whether a check-in was a duress one |
 | The gas tap (our Vercel function) | the fresh address it funds. Its code never reads the caller's IP: spam is held off by a proof of work the browser solves ([`api/_lib.ts`](../api/_lib.ts) `powValid`), a per-address limit and an hourly budget | keys, documents, vault ids. It keeps no log of its own. The hosting platform still sees the request's IP in its own logs, and the tap's transfers are public, so every key it funds is visibly a Proof of Life key. For a real vault, the app's "own gas" option funds the key from elsewhere |
 | Someone holding the activist's phone | a list of passphrase-sealed blobs | addresses, roles, labels and vaults. Vaults are not stored on the phone; the app finds them on Arkiv after unlocking |
