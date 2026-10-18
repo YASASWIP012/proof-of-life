@@ -9,7 +9,7 @@ Built on [Arkiv](https://arkiv.network), the Web3 database, for **Arkiv: Global 
 | | |
 |---|---|
 | Live app | **https://proof-of-life-khaki.vercel.app** |
-| Demo video (1:49) | **https://youtu.be/ZerJ34K8SQE** |
+| Demo video (2:35) | **https://youtu.be/cuUYZZZBiPM** |
 | Five-minute drill (no wallet needed) | https://proof-of-life-khaki.vercel.app/#/drill |
 | A vault that was released, with a forged piece and a forged heartbeat beside it | [released](https://proof-of-life-khaki.vercel.app/#/v/0xff209ceea0104dab5d737fc1e7d5c740c717832d74af8e8970dafd1cb7077bca/0x126B45be97c649DcA7A44e3eB41e8dacf79436d8) |
 | A vault kept alive by a check-in bot every few hours | [always-alive](https://proof-of-life-khaki.vercel.app/#/v/0x87935a7665533da43c4b562fa4a39951c6fe2a4d3a82a19b24c2aef7bca31dc9/0x8C8adBA31c57C51b4cBAdA5c503826378260e01e) |
