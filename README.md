@@ -125,6 +125,10 @@ npx github:YASASWIP012/proof-of-life watch <vault_id> <creator> --key-file my-cu
 
 It follows check-ins over a WebSocket, says when the activist is overdue, recognises a duress check-in, and publishes this custodian's piece the moment the heartbeat stops. `POL_PASSPHRASE` can hold the passphrase for unattended use.
 
+`--key-file` takes the backup the website gives a custodian, exactly as downloaded. The command renews the custodian's 14-day lease when fewer than four days are left.
+
+A custodian without a machine that stays on can run the same check every hour from their own GitHub account: copy [`examples/custodian-watcher.yml`](examples/custodian-watcher.yml) into a private repository and add the four secrets it lists. Each custodian runs their own, on an account we never see. Our [demo keeper](.github/workflows/keeper.yml) only plays the bot custodians of the demo vaults; it holds no key of a real custodian, and no real vault depends on it. A failed run is the alarm: GitHub emails the custodian when the activist is overdue, under duress, or the vault has lapsed.
+
 ## Reproduce it in three minutes
 
 1. Open the **[drill](https://proof-of-life-khaki.vercel.app/#/drill)** and press **Start**. Your tab creates an activist and three custodians, seals a synthetic RTI reply, and shows every transaction. Check in once, then let it lapse. Custodian 2 plays unreachable and a forger posts a fake piece. Two real custodians release, and the public page decrypts.

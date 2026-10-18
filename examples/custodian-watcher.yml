@@ -1,0 +1,32 @@
+# A custodian's own watcher, run from the custodian's own GitHub account. Nothing here touches our servers.
+#
+# 1. Create a private repository on your account and put this file at .github/workflows/custodian-watcher.yml.
+# 2. Add three repository secrets: POL_VAULT (the vault id), POL_CREATOR (the vault's creator address), and
+#    POL_BACKUP (the full text of the key backup file the website gave you). Add POL_PASSPHRASE too.
+# 3. Every hour it renews your custody before the 14-day lease runs out, and publishes your key piece if the
+#    heartbeat has stopped or the activist checked in with the duress passphrase.
+#
+# A run fails, and GitHub emails you, when the activist is overdue (exit 1), the vault has lapsed or released
+# (2 to 4), or the last check-in was forced (6). A green run means the activist checked in on time.
+name: custodian-watcher
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+concurrency: custodian-watcher
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Write the key backup
+        run: printf '%s' "$POL_BACKUP" > "$RUNNER_TEMP/backup.json"
+        env:
+          POL_BACKUP: ${{ secrets.POL_BACKUP }}
+      - name: One watcher pass
+        run: npx -y github:YASASWIP012/proof-of-life watch "$POL_VAULT" "$POL_CREATOR" --key-file "$RUNNER_TEMP/backup.json" --auto-release --once
+        env:
+          POL_VAULT: ${{ secrets.POL_VAULT }}
+          POL_CREATOR: ${{ secrets.POL_CREATOR }}
+          POL_PASSPHRASE: ${{ secrets.POL_PASSPHRASE }}

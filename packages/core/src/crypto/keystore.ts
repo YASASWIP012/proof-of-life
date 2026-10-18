@@ -1,7 +1,7 @@
 // A secret key wrapped with a passphrase (scrypt + AES-256-GCM), safe to keep in the browser or a backup file.
 import { scryptAsync } from "@noble/hashes/scrypt.js";
 import { open, seal } from "./aead.js";
-import { fromBase64, randomBytes, toBase64, utf8 } from "./bytes.js";
+import { fromBase64, fromUtf8, hexToBytes, randomBytes, toBase64, utf8 } from "./bytes.js";
 
 export type WrappedKey = {
   v: 1;
@@ -61,4 +61,31 @@ export async function sealBlob(payload: Uint8Array, passphrase: string): Promise
 export async function openBlob(b: SealedBlob, passphrase: string): Promise<Uint8Array> {
   const key = await kek(passphrase, fromBase64(b.salt), b.n, b.r, b.p);
   return open(key, fromBase64(b.data), BLOB_AAD);
+}
+
+/** A key opened from a backup file: the secret, and the role the app gave it when one is recorded. */
+export type BackupKey = { secret: Uint8Array; role?: string };
+
+/**
+ * Opens a backup file with a passphrase, whatever app version wrote it: a v1 wrapped key, or a v2 file of sealed
+ * blobs (the website's format). Returns every key the passphrase opens; decoy blobs simply fail to open.
+ */
+export async function openKeyBackup(json: string, passphrase: string): Promise<BackupKey[]> {
+  const parsed = JSON.parse(json);
+  if (parsed?.v === 1 && parsed.data && parsed.address) return [{ secret: await unwrapKey(parsed as WrappedKey, passphrase) }];
+  const blobs: SealedBlob[] = parsed?.v === 2 && Array.isArray(parsed.blobs) ? parsed.blobs : Array.isArray(parsed) ? parsed : [];
+  if (!blobs.length) throw new Error("not a Proof of Life key backup");
+  const out: BackupKey[] = [];
+  for (const b of blobs) {
+    let plain: Uint8Array;
+    try {
+      plain = await openBlob(b, passphrase);
+    } catch {
+      continue;
+    }
+    const p = JSON.parse(fromUtf8(plain)) as { secret: string; role?: string };
+    out.push({ secret: hexToBytes(p.secret), role: p.role });
+  }
+  if (!out.length) throw new Error("the passphrase opens no key in this backup");
+  return out;
 }

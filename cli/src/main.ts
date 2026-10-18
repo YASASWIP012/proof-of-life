@@ -3,8 +3,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
-  ackCustody, duressSignal, listReleased, listVaults, loadCiphertext, loadVault, releaseMyShare, socketClient, publicClient, unsealVault, unwrapKey,
-  vaultStatus, walletClient, watchVault, BLOCK_SECONDS, type VaultView, type WrappedKey,
+  ackCustody, duressSignal, isListed, listReleased, listVaults, loadCiphertext, loadVault, openKeyBackup, releaseMyShare, socketClient, publicClient,
+  unsealVault, vaultStatus, walletClient, watchVault, BLOCK_SECONDS, type VaultView,
 } from "@proof-of-life/core";
 import { privateKeyToAccount } from "viem/accounts";
 import { bytesToHex, type Hex } from "viem";
@@ -45,18 +45,52 @@ function printVault(v: VaultView) {
   for (const r of v.rejected) log(`  ignored ${r.kind} ${r.key.slice(0, 12)}…  ${r.reason}`);
 }
 
-async function loadKey(): Promise<{ account: ReturnType<typeof privateKeyToAccount>; secret: Uint8Array }> {
+type Seat = { account: ReturnType<typeof privateKeyToAccount>; secret: Uint8Array; slot: number };
+
+/** Opens the backup (any version) and returns the key that holds a seat in this vault. */
+async function loadSeat(v: VaultView): Promise<Seat> {
   const file = flag("key-file");
   if (!file) throw new Error("--key-file <backup.json> is required");
-  const wrapped = JSON.parse(readFileSync(file, "utf8")) as WrappedKey;
   let pass = process.env.POL_PASSPHRASE;
   if (!pass) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     pass = await rl.question("passphrase: ");
     rl.close();
   }
-  const secret = await unwrapKey(wrapped, pass);
-  return { account: privateKeyToAccount(bytesToHex(secret)), secret };
+  for (const k of await openKeyBackup(readFileSync(file, "utf8"), pass)) {
+    const account = privateKeyToAccount(bytesToHex(k.secret));
+    const seat = v.manifest.custodians.find((c) => c.address.toLowerCase() === account.address.toLowerCase());
+    if (seat) return { account, secret: k.secret, slot: seat.slot };
+  }
+  throw new Error("no key in this backup is a custodian of this vault");
+}
+
+/** Renews this custodian's 14-day lease when it is missing or has under four days left. */
+async function renewIfDue(v: VaultView, me: Seat) {
+  const ack = v.acks.find((a) => a.slot === me.slot);
+  if (ack && Number(ack.expiresAt - v.head) * BLOCK_SECONDS > 4 * 86400) return;
+  const r = await ackCustody(walletClient(me.account, { rpc }), { vaultId: v.vaultId, slot: me.slot, existingKey: ack?.key, listed: isListed(v.manifest) });
+  log(`custody ${ack ? "renewed" : "confirmed"}: ${r.txHash}`);
+}
+
+/** One pass of a custodian's duty: report, renew custody, and publish this piece on a lapse or a duress check-in. */
+async function duty(v: VaultView, me: Seat | null, auto: boolean): Promise<boolean> {
+  if (v.status.phase === "overdue") log("OVERDUE: try to reach the activist now.");
+  const duress = !!me && duressSignal(v, me.slot, me.secret) === "duress";
+  if (duress) log("DURESS: the activist's last check-in used the duress passphrase.");
+  if (!me) return duress;
+  const released = v.releases.some((r) => r.slot === me.slot && r.valid);
+  if (auto && !released && (v.status.phase === "lapsed" || v.status.phase === "releasing" || duress)) {
+    try {
+      const r = await releaseMyShare(walletClient(me.account, { rpc }), reader, v, me.secret);
+      log(`released my piece: ${r.txHash}`);
+    } catch (e) {
+      log(`release: ${(e as Error).message}`);
+    }
+  } else if (v.status.phase === "alive" || v.status.phase === "overdue") {
+    await renewIfDue(v, me).catch((e) => log(`renew: ${(e as Error).message}`));
+  }
+  return duress;
 }
 
 async function main() {
@@ -96,28 +130,33 @@ async function main() {
       return out.verified ? 0 : 5;
     }
     case "release": {
-      const { account, secret } = await loadKey();
       const v = await loadVault(reader, vaultId, creator);
-      const r = await releaseMyShare(walletClient(account, { rpc }), reader, v, secret);
+      const me = await loadSeat(v);
+      const r = await releaseMyShare(walletClient(me.account, { rpc }), reader, v, me.secret);
       log(`piece published: ${r.txHash}`);
       return 0;
     }
     case "ack": {
-      const { account } = await loadKey();
       const v = await loadVault(reader, vaultId, creator);
-      const seat = v.manifest.custodians.find((c) => c.address.toLowerCase() === account.address.toLowerCase());
-      if (!seat) throw new Error("this key is not a custodian of this vault");
-      const r = await ackCustody(walletClient(account, { rpc }), { vaultId, slot: seat.slot, existingKey: v.acks.find((a) => a.slot === seat.slot)?.key });
+      const me = await loadSeat(v);
+      const r = await ackCustody(walletClient(me.account, { rpc }), { vaultId, slot: me.slot, existingKey: v.acks.find((a) => a.slot === me.slot)?.key, listed: isListed(v.manifest) });
       log(`custody confirmed: ${r.txHash}`);
       return 0;
     }
     case "watch": {
-      // A custodian's watcher: follows check-ins over a WebSocket, renews custody, and releases on lapse.
+      // A custodian's watcher: follows check-ins over a WebSocket, renews custody, and releases on lapse or duress.
+      // With --once it does a single pass and exits, for a scheduled job on the custodian's own account.
       const auto = has("auto-release");
-      const key = flag("key-file") ? await loadKey() : null;
-      const sock = socketClient({ ws });
       let v = await loadVault(reader, vaultId, creator);
+      const me = flag("key-file") ? await loadSeat(v) : null;
       printVault(v);
+      if (has("once")) {
+        const duress = await duty(v, me, auto);
+        // A non-zero exit fails a scheduled job, and the scheduler tells the custodian.
+        return duress ? 6 : EXIT[v.status.phase];
+      }
+      await duty(v, me, auto);
+      const sock = socketClient({ ws });
       let stop = () => {};
       const arm = () => {
         stop();
@@ -126,18 +165,7 @@ async function main() {
           if (s.kind === "activity") log(`${new Date().toISOString()} custodian activity at block ${s.blockNumber}`);
           v = await loadVault(reader, vaultId, creator);
           log(`${new Date().toISOString()} phase ${v.status.phase}`);
-          if (v.status.phase === "overdue") log("OVERDUE: try to reach the activist now.");
-          const seat = key && v.manifest.custodians.find((c) => c.address.toLowerCase() === key.account.address.toLowerCase());
-          const duress = !!(seat && key && duressSignal(v, seat.slot, key.secret) === "duress");
-          if (duress) log("DURESS: the activist's last check-in used the duress passphrase.");
-          if (key && auto && (v.status.phase === "lapsed" || v.status.phase === "releasing" || duress)) {
-            try {
-              const r = await releaseMyShare(walletClient(key.account, { rpc }), reader, v, key.secret);
-              log(`released my piece: ${r.txHash}`);
-            } catch (e) {
-              log(`release: ${(e as Error).message}`);
-            }
-          }
+          await duty(v, me, auto);
           if (v.status.phase === "released") {
             log("released. done.");
             process.exit(EXIT.released);
@@ -154,7 +182,9 @@ async function main() {
   proof-of-life vaults                                   list listed vaults and their phase
   proof-of-life released                                 list released evidence, including vaults unlisted while alive
   proof-of-life status  <vault_id> <creator> [--at N]    phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released); --at reads it as of block N
-  proof-of-life watch   <vault_id> <creator> [--key-file f --auto-release]
+  proof-of-life watch   <vault_id> <creator> [--key-file f --auto-release --once]
+                                                         follow the vault; renew custody; publish your piece on a lapse or duress.
+                                                         --once: one pass, then exit (6 on duress), for a scheduled job
   proof-of-life ack     <vault_id> <creator> --key-file f   confirm or renew custody
   proof-of-life release <vault_id> <creator> --key-file f   publish your piece (only after the heartbeat stops)
   proof-of-life open    <vault_id> <creator> [--out dir]    rebuild the key and decrypt a released vault

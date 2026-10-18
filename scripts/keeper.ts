@@ -1,7 +1,7 @@
 // The demo keeper. Runs every 30 minutes in GitHub Actions, far from the website:
 // it checks in for the "always-alive" activist, renews custody leases, and releases any demo vault whose heartbeat stopped.
 import { readFileSync } from "node:fs";
-import { ackCustody, checkIn, extendableKeys, loadVault, publicClient, releaseMyShare, walletClient, type VaultView } from "@proof-of-life/core";
+import { ackCustody, checkIn, extendableKeys, isListed, loadVault, publicClient, releaseMyShare, walletClient, type VaultView } from "@proof-of-life/core";
 import { account, rpc } from "./env.js";
 
 const reader = publicClient({ rpc });
@@ -33,7 +33,7 @@ for (const [name, r] of Object.entries(registry)) {
       console.log(`  custodian ${i + 1} released ${tx.txHash}`);
       v = await loadVault(reader, r.vaultId, r.creator);
     } else if (!released && v.heartbeat && (!ack || ack.expiresAt - v.head < 5n * DAY_BLOCKS)) {
-      const tx = await ackCustody(walletClient(c, { rpc }), { vaultId: r.vaultId, slot: i + 1, existingKey: ack?.key, listed: true });
+      const tx = await ackCustody(walletClient(c, { rpc }), { vaultId: r.vaultId, slot: i + 1, existingKey: ack?.key, listed: isListed(v.manifest) });
       console.log(`  custodian ${i + 1} renewed custody ${tx.txHash}`);
     }
   }
