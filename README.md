@@ -13,6 +13,7 @@ Built on [Arkiv](https://arkiv.network), the Web3 database, for **Arkiv: Global 
 | A vault that was released, with a forged piece and a forged heartbeat beside it | [released](https://proof-of-life-khaki.vercel.app/#/v/0xff209ceea0104dab5d737fc1e7d5c740c717832d74af8e8970dafd1cb7077bca/0x126B45be97c649DcA7A44e3eB41e8dacf79436d8) |
 | A vault kept alive by a check-in bot every few hours | [always-alive](https://proof-of-life-khaki.vercel.app/#/v/0x87935a7665533da43c4b562fa4a39951c6fe2a4d3a82a19b24c2aef7bca31dc9/0x8C8adBA31c57C51b4cBAdA5c503826378260e01e) |
 | A vault whose heartbeat stops at **12:00 IST on 21 October**, during judging, and is then released by its custodians | [lapses-oct-21](https://proof-of-life-khaki.vercel.app/#/v/0x612ecb90f7fd74b4c11feeeeaeec9840841be40f5cab2a1d52235af64fd6270d/0x5D40aE116e255576B0D5F1FE706e3a236c59bDF1) |
+| A pilot vault whose slot-1 custodian is an outside person, unnamed by choice, holding a key we never see. They confirmed custody from their own phone | [pilot](https://proof-of-life-khaki.vercel.app/#/v/0x54f8db01e47e3128e19b5ce5e746e8aabea9dc28cddbd8b5bb73431d9384a12f/0xa15eeDe179654Fe9807F39099392E084EDC9143f) |
 | Data contract | [`arkiv/schema.md`](arkiv/schema.md) |
 | Friction report | [`arkiv/friction.md`](arkiv/friction.md) |
 
@@ -55,7 +56,7 @@ Today an activist's protection is a folder on a laptop, a copy with a friend, or
 
 ## Who has to do what
 
-Arkiv enforces three things: the deadline, the undeletable record, and who wrote each piece. The release itself needs `k` of the activist's custodians to publish their pieces. If enough custodians are silenced or refuse, the vault stays sealed, so an activist should pick people in different places and set `k` below the total. Custodians can run the [CLI watcher](cli/src/main.ts) (`watch --auto-release`) on their own machines, so a release does not wait on anyone opening a website. The demo vaults' custodians are bots run by one GitHub workflow, which is fine for a demo and not how a real vault should be set up.
+Arkiv enforces three things: the deadline, the undeletable record, and who wrote each piece. The release itself needs `k` of the activist's custodians to publish their pieces. If enough custodians are silenced or refuse, the vault stays sealed, so an activist should pick people in different places and set `k` below the total. Custodians can run the [CLI watcher](cli/src/main.ts) (`watch --auto-release`) on their own machines, so a release does not wait on anyone opening a website. The demo vaults' custodians are bots run by one GitHub workflow, which is fine for a demo and not how a real vault should be set up. The [pilot vault](https://proof-of-life-khaki.vercel.app/#/v/0x54f8db01e47e3128e19b5ce5e746e8aabea9dc28cddbd8b5bb73431d9384a12f/0xa15eeDe179654Fe9807F39099392E084EDC9143f) is the first step past that: its slot-1 custodian is an outside person, unnamed by choice, who made their key on their own phone, sent only the invite code, and confirmed custody on Arkiv from that phone (`0x5a96eD4f…2460`).
 
 ## Why it has to be Arkiv
 
@@ -147,6 +148,8 @@ arkiv           schema.md and friction.md
 | `0x5D40aE116e255576B0D5F1FE706e3a236c59bDF1` | demo activist, lapses-oct-21 vault |
 | `0x126B45be97c649DcA7A44e3eB41e8dacf79436d8` | demo activist, released vault |
 | `0x90E400c9569e01Ec94798C4BFec8452731095A45` | end-to-end test activist (run 3) |
+| `0xa15eeDe179654Fe9807F39099392E084EDC9143f` | pilot vault activist |
+| `0x5a96eD4fD61a72aE06Ba3468c1eE6C0aB33D2460` | pilot vault custodian, slot 1: an outside person's own key |
 
 Demo custodians are listed by derivation index in [`scripts/demo-vaults.json`](scripts/demo-vaults.json), and the [keeper workflow](.github/workflows/keeper.yml) acts for them every 30 minutes. Every other creator is a visitor's fresh key.
 
