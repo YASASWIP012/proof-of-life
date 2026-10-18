@@ -17410,7 +17410,7 @@ async function openKeyBackup(json2, passphrase) {
       continue;
     }
     const p = JSON.parse(fromUtf8(plain));
-    out.push({ secret: hexToBytes2(p.secret), role: p.role });
+    out.push({ secret: hexToBytes2(p.secret), role: p.role, tok: p.tok ? hexToBytes2(p.tok) : void 0 });
   }
   if (!out.length) throw new Error("the passphrase opens no key in this backup");
   return out;
@@ -17469,6 +17469,10 @@ function unsealVault(vaultId, ciphertext, shares) {
 var TOKEN_BYTES = 16;
 var BEAT_SLOT_BYTES = 33 + 12 + TOKEN_BYTES + 16;
 var aad = (vaultId, slot) => concat(utf8("proof-of-life/beat/v1"), hexToBytes2(vaultId), new Uint8Array([slot]));
+function beatPayload(vaultId, custodianPubkeys, token) {
+  if (token.length !== TOKEN_BYTES) throw new RangeError("beat token must be 16 bytes");
+  return concat(...custodianPubkeys.map((pub, i) => encryptTo(hexToBytes2(pub), token, aad(vaultId, i + 1))));
+}
 function readBeatToken(vaultId, payload, slot, custodianSecret) {
   const start = (slot - 1) * BEAT_SLOT_BYTES;
   if (payload.length < start + BEAT_SLOT_BYTES) return null;
@@ -50054,6 +50058,7 @@ var ReleasePayload = external_exports.object({
   observed_lapse_block: external_exports.string().regex(/^\d+$/)
 });
 var secondsToBlocks = (s) => BigInt(Math.ceil(s / BLOCK_SECONDS));
+var evenSeconds = (s) => Math.ceil(s / BLOCK_SECONDS) * BLOCK_SECONDS;
 
 // ../packages/core/src/arkiv/rti.ts
 var RTI_APPEAL_DAYS = 30 + 45 + 90;
@@ -51619,6 +51624,20 @@ async function sealedBatch(wallet, reader2, creates, keepOwnership = /* @__PURE_
   if (result.createdEntities.some((k, i) => k.toLowerCase() !== predicted[i].key.toLowerCase())) throw new PredictionMismatch();
   return result;
 }
+async function checkIn(wallet, p) {
+  const keepDays = p.vaultDays ?? LIFETIME.defaultVaultDays;
+  const soon = (p.head ?? 0n) + BigInt(30 * 43200);
+  const target = (p.head ?? 0n) + BigInt(keepDays * 43200);
+  const carry2 = (p.sealed ?? []).filter((e) => p.head !== void 0 && e.expiresAt < soon && e.expiresAt < target);
+  const life = ExpirationTime.fromSeconds(evenSeconds(p.intervalS + p.graceS));
+  return wallet.executeBatch({
+    creates: p.beat ? [{ payload: p.beat.payload, contentType: BIN, attributes: attrs.beat(p.beat.vaultId, p.beat.listed ?? false), expires: life, flags: { readonly: true, permissionlessExtension: false } }] : void 0,
+    extensions: [
+      { entityKey: p.heartbeatKey, expires: life },
+      ...carry2.map((e) => ({ entityKey: e.key, expires: ExpirationTime.fromDays(keepDays) }))
+    ]
+  });
+}
 async function ackCustody(wallet, p) {
   const expires = ExpirationTime.fromDays(LIFETIME.ackDays);
   if (p.existingKey) return wallet.extendEntity({ entityKey: p.existingKey, expires });
@@ -51872,6 +51891,13 @@ async function listReleased(client) {
     })
   );
   return out.sort((a, b) => Number(b.firstBlock - a.firstBlock));
+}
+async function extendableKeys(client, view, who) {
+  const { rows } = await fetchAll(
+    client.select({ key: true, owner: true, expiresAt: true, creationFlags: true }).where(eq("vault_id", bytes32(view.vaultId)), or(eq("type", str("chunk")), eq("type", str(kindTag(view.vaultId, "chunk"))))).createdBy(view.creator).limit(200)
+  );
+  const chunks = rows.map((r) => ({ key: r.key, expiresAt: r.expiresAt, owner: r.owner, permissionless: r.creationFlags.permissionlessExtension }));
+  return [...view.sealedKeys, ...chunks].filter((e) => e.permissionless || who === "activist" && same(e.owner, view.creator)).map((e) => ({ key: e.key, expiresAt: e.expiresAt }));
 }
 
 // ../packages/core/src/arkiv/events.ts
@@ -52167,6 +52193,26 @@ async function main() {
       for (const r of await listReleased(reader)) log(`${r.vaultId} ${r.creator} pieces ${r.pieces}${r.ignored ? ` (+${r.ignored} ignored)` : ""} first at block ${r.firstBlock}`);
       return 0;
     }
+    case "checkin": {
+      const v = await loadVault(reader, vaultId, creator);
+      const file2 = flag("key-file");
+      if (!file2) throw new Error("--key-file <activist-backup.json> is required");
+      let pass = process.env.POL_PASSPHRASE;
+      if (!pass) {
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        pass = await rl.question("passphrase: ");
+        rl.close();
+      }
+      const key2 = (await openKeyBackup(readFileSync(file2, "utf8"), pass)).find((k) => privateKeyToAccount(bytesToHex4(k.secret)).address.toLowerCase() === v.creator.toLowerCase());
+      if (!key2) throw new Error("no key in this backup is this vault's activist");
+      if (!v.heartbeat) throw new Error(`the heartbeat is gone (phase ${v.status.phase}); a lapsed vault cannot be revived`);
+      const account = privateKeyToAccount(bytesToHex4(key2.secret));
+      const m = v.manifest;
+      const beat = key2.tok ? { vaultId: v.vaultId, payload: beatPayload(v.vaultId, m.custodians.map((c) => c.pubkey), key2.tok), listed: isListed(m) } : void 0;
+      const r = await checkIn(walletClient(account, { rpc }), { heartbeatKey: v.heartbeat.key, intervalS: m.interval_s, graceS: m.grace_s, sealed: await extendableKeys(reader, v, "activist"), head: v.head, beat });
+      log(`checked in: ${r.txHash}`);
+      return 0;
+    }
     case "status": {
       const at = flag("at");
       const v = await loadVault(reader, vaultId, creator, at ? { atBlock: BigInt(at) } : {});
@@ -52243,6 +52289,7 @@ async function main() {
   proof-of-life watch   <vault_id> <creator> [--key-file f --auto-release --once]
                                                          follow the vault; renew custody; publish your piece on a lapse or duress.
                                                          --once: one pass, then exit (6 on duress), for a scheduled job
+  proof-of-life checkin <vault_id> <creator> --key-file f   the activist's check-in, with no website (key needs a little GLM)
   proof-of-life ack     <vault_id> <creator> --key-file f   confirm or renew custody
   proof-of-life release <vault_id> <creator> --key-file f   publish your piece (only after the heartbeat stops)
   proof-of-life open    <vault_id> <creator> [--out dir]    rebuild the key and decrypt a released vault

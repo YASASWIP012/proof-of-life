@@ -64,7 +64,8 @@ export async function openBlob(b: SealedBlob, passphrase: string): Promise<Uint8
 }
 
 /** A key opened from a backup file: the secret, and the role the app gave it when one is recorded. */
-export type BackupKey = { secret: Uint8Array; role?: string };
+/** `tok` is the check-in token the blob carries (activist keys): ok or duress, the blob itself never says which. */
+export type BackupKey = { secret: Uint8Array; role?: string; tok?: Uint8Array };
 
 /**
  * Opens a backup file with a passphrase, whatever app version wrote it: a v1 wrapped key, or a v2 file of sealed
@@ -83,8 +84,8 @@ export async function openKeyBackup(json: string, passphrase: string): Promise<B
     } catch {
       continue;
     }
-    const p = JSON.parse(fromUtf8(plain)) as { secret: string; role?: string };
-    out.push({ secret: hexToBytes(p.secret), role: p.role });
+    const p = JSON.parse(fromUtf8(plain)) as { secret: string; role?: string; tok?: string };
+    out.push({ secret: hexToBytes(p.secret), role: p.role, tok: p.tok ? hexToBytes(p.tok) : undefined });
   }
   if (!out.length) throw new Error("the passphrase opens no key in this backup");
   return out;

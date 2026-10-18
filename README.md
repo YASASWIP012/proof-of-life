@@ -126,6 +126,16 @@ A forged release could open a vault early; a forged heartbeat could keep a dead 
 
 The code is MIT and the data contract is public in two forms: [`arkiv/schema.md`](arkiv/schema.md) in prose and [`arkiv/contract.schema.json`](arkiv/contract.schema.json) as JSON Schema, generated from the schemas the app validates with (a test fails if they drift). [`examples/list-released.mjs`](examples/list-released.mjs) is about 40 lines using only the Arkiv SDK: it lists released evidence and applies the same `$creator` and commitment checks, so a newsroom or legal-aid group can run its own reader or watcher with nothing of ours. The CLI, the one-file reader and the [custodian watcher workflow](examples/custodian-watcher.yml) read the same public entities.
 
+## If the site is blocked
+
+Nothing an activist or custodian has to do needs this website. From any terminal:
+
+```bash
+npx github:YASASWIP012/proof-of-life checkin <vault_id> <creator> --key-file my-activist-backup.json
+```
+
+checks in with the same transaction the app sends (heartbeat extended, sealed data carried forward, encrypted note to the custodians), and a duress passphrase works the same way. `ack`, `release` and `open` cover the custodians and readers, `--rpc` points any of them at another Arkiv endpoint, and [`reader.html`](reader.html) opens released evidence from a saved file with no server at all.
+
 ## Run your own custodian watcher
 
 A custodian does not need our website or our servers. On any machine with Node 20+:
@@ -198,6 +208,8 @@ arkiv           schema.md and friction.md
 Demo custodians are listed by derivation index in [`scripts/demo-vaults.json`](scripts/demo-vaults.json), and the [keeper workflow](.github/workflows/keeper.yml) acts for them every 30 minutes. Every other creator is a visitor's fresh key.
 
 ## What this is for, and what it is not
+
+**Who uses it today, plainly.** No RTI group or activist uses the vault yet: it runs on a testnet with synthetic documents, and the demo vaults' custodians are our own bots. What works for a real person today is the RTI clock. The path to real use is a partner that already protects RTI users or their papers, such as an RTI collective, a newsroom's legal desk or a legal-aid clinic, holding custodian keys and running the [watcher](examples/custodian-watcher.yml) on its own account, with newsroom release so editors read the documents first. That needs a network that will still exist in a year, which is why it waits for Arkiv's mainnet.
 
 For lawfully obtained records: RTI replies, public records and your own evidence. Not for classified material, other people's personal data, or anything you could not lawfully hold. For real use, choose newsroom release so editors check documents before anything is published.
 

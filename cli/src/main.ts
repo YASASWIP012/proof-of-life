@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
-  ackCustody, duressSignal, isListed, listReleased, listVaults, loadCiphertext, loadVault, openKeyBackup, releaseMyShare, socketClient, publicClient,
+  ackCustody, beatPayload, checkIn, duressSignal, extendableKeys, isListed, listReleased, listVaults, loadCiphertext, loadVault, openKeyBackup, releaseMyShare, socketClient, publicClient,
   unsealVault, vaultStatus, walletClient, watchVault, BLOCK_SECONDS, type VaultView,
 } from "@proof-of-life/core";
 import { privateKeyToAccount } from "viem/accounts";
@@ -111,6 +111,28 @@ async function main() {
       for (const r of await listReleased(reader)) log(`${r.vaultId} ${r.creator} pieces ${r.pieces}${r.ignored ? ` (+${r.ignored} ignored)` : ""} first at block ${r.firstBlock}`);
       return 0;
     }
+    case "checkin": {
+      // The activist's check-in, with no website: the same batch the app sends (extend the heartbeat, carry sealed
+      // data forward, write the encrypted beat note). A key opened with the duress passphrase checks in identically.
+      const v = await loadVault(reader, vaultId, creator);
+      const file = flag("key-file");
+      if (!file) throw new Error("--key-file <activist-backup.json> is required");
+      let pass = process.env.POL_PASSPHRASE;
+      if (!pass) {
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        pass = await rl.question("passphrase: ");
+        rl.close();
+      }
+      const key = (await openKeyBackup(readFileSync(file, "utf8"), pass)).find((k) => privateKeyToAccount(bytesToHex(k.secret)).address.toLowerCase() === v.creator.toLowerCase());
+      if (!key) throw new Error("no key in this backup is this vault's activist");
+      if (!v.heartbeat) throw new Error(`the heartbeat is gone (phase ${v.status.phase}); a lapsed vault cannot be revived`);
+      const account = privateKeyToAccount(bytesToHex(key.secret));
+      const m = v.manifest;
+      const beat = key.tok ? { vaultId: v.vaultId, payload: beatPayload(v.vaultId, m.custodians.map((c) => c.pubkey as Hex), key.tok), listed: isListed(m) } : undefined;
+      const r = await checkIn(walletClient(account, { rpc }), { heartbeatKey: v.heartbeat.key, intervalS: m.interval_s, graceS: m.grace_s, sealed: await extendableKeys(reader, v, "activist"), head: v.head, beat });
+      log(`checked in: ${r.txHash}`);
+      return 0;
+    }
     case "status": {
       const at = flag("at");
       const v = await loadVault(reader, vaultId, creator, at ? { atBlock: BigInt(at) } : {});
@@ -188,6 +210,7 @@ async function main() {
   proof-of-life watch   <vault_id> <creator> [--key-file f --auto-release --once]
                                                          follow the vault; renew custody; publish your piece on a lapse or duress.
                                                          --once: one pass, then exit (6 on duress), for a scheduled job
+  proof-of-life checkin <vault_id> <creator> --key-file f   the activist's check-in, with no website (key needs a little GLM)
   proof-of-life ack     <vault_id> <creator> --key-file f   confirm or renew custody
   proof-of-life release <vault_id> <creator> --key-file f   publish your piece (only after the heartbeat stops)
   proof-of-life open    <vault_id> <creator> [--out dir]    rebuild the key and decrypt a released vault
