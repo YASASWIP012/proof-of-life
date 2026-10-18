@@ -69,7 +69,7 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 
 ---
 
-### F5. Generic attribute values collide across projects, and anything typed can be enumerated
+### F5. Attribute names and values share one global space, which the docs do not say
 
 - **Surface:** queries over shared attribute names; docs, Querying data.
 - **Expected:** `type = str('vault')` finds this project's vaults.
@@ -77,6 +77,24 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 - **Repro:** `npx tsx scripts/collisions.ts`.
 - **What we did:** every read filters by `project`, `vault_id` or `$creator`. Unlisted vaults now store only `vault_id` and a `type` hashed with the vault id ([`schema.ts`](../packages/core/src/arkiv/schema.ts) `kindTag`), with all numbers inside the encrypted manifest, so nothing can be listed without the link.
 - **What would help:** a line in the docs that attribute names and values share one global space, with a recommended namespacing pattern.
+
+### F6. Expiry hides an entity from current queries but not from history, and the docs say it is gone
+
+- **Surface:** docs, Mutating data ("From its expiry block on, an entity is gone. Queries no longer return it"); query option `atBlock`; docs, Querying data ("The node keeps a limited history, so a block that is too old is rejected").
+- **Expected:** after expiry the entity's contents are no longer retrievable, and `atBlock` works only a short way back.
+- **Actual, measured 18 October:** our released demo vault's heartbeat (`0xe200010f…3daf8a`) expired at block 692660. At the head, `getEntity` throws `NoEntityFoundError` and a `$key` query returns 0 rows, as documented. But `atBlock 692620` and `atBlock 692650` both return it, with its attributes. `atBlock` reads succeeded at every depth we tried, down to block 26299, about 700,000 blocks or 389 hours back at head 726299. No "too old" rejection appeared.
+- **Repro:** `npx tsx scripts/expired.ts` and `npx tsx scripts/retention.ts`.
+- **Why it matters:** "let it expire" is not "delete it". For products that rely on expiry for privacy, the data stays readable to anyone who asks for an old block. For us it is harmless only because everything we store is ciphertext or public by design; we now say so in the app and in [`schema.md`](schema.md).
+- **What would fix it:** a sentence in the expiry docs that expired entities remain readable at earlier blocks, and the actual retention window for Tiramisu.
+
+### F7. No event fires when an entity expires
+
+- **Surface:** `watchEntityEvents` (documented in Live Events).
+- **Expected (for a dead man's switch):** an event when the heartbeat expires, since that is the one moment the product exists for.
+- **Actual:** as documented, nothing fires. In `scripts/probe.ts ws` an entity created with a 20-second life produced `created 692428` and `extended 692430` and nothing at expiry, while a sibling's deletion did fire `deleted 692435`. A deleted heartbeat (forced deletion) therefore surfaces at once, while a lapsed one surfaces only when someone looks.
+- **Repro:** `npx tsx scripts/probe.ts ws`.
+- **Our workaround:** pages and the CLI set a timer from the heartbeat's own `$expiresAt` (re-armed in steps past the 24.8-day `setTimeout` limit), then confirm with one query ([`events.ts`](../packages/core/src/arkiv/events.ts)). A custodian who runs no watcher learns of a lapse only by opening the vault page.
+- **What would fix it:** a synthetic `EntityExpired` event, or `arkiv_expiringBetween(from, to)` so a watcher can catch up after downtime.
 
 ## Paths we tested that worked
 
@@ -127,14 +145,6 @@ These match the docs, so they are not defects. We list what we expected, what we
 - **Actual:** the docs are right that a key in the page can be stolen. That leaves two options: read keyless and risk running out mid-demo, or run a relay with a key and add the server the app exists to avoid.
 - **What we did:** we designed for the budget. A vault page costs **one query** (W6) and the directory three. Reads go direct by default; on a rate-limit style failure the app retries once through a small allowlisted relay ([`api/rpc.ts`](../api/rpc.ts)), and the footer says which path is in use. The CLI and curl recipes never use the relay.
 - **What would fix it:** an origin-locked "publishable" key that is meant to be public, or a per-origin browser quota.
-
-### D2. No event fires when an entity expires
-
-- **Surface:** `watchEntityEvents`; documented in Live Events ("An entity that reaches its expiration date fires no event").
-- **Expected (from the docs):** no event at expiry.
-- **Actual:** as documented, nothing fires. In `scripts/probe.ts ws` an entity created with a 20-second life produced `created` and `extended` events and nothing when it expired (blocks 692428 to 692435).
-- **Our workaround:** pages and the CLI set a timer from the heartbeat's own `$expiresAt`, then confirm with one query ([`events.ts`](../packages/core/src/arkiv/events.ts)).
-- **What would fix it:** a synthetic `EntityExpired` event, or `arkiv_expiringBetween(from, to)` so a watcher can catch up after downtime.
 
 ## Measured costs (Tiramisu, 17 October 2026)
 

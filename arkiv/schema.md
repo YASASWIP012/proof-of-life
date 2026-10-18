@@ -130,7 +130,7 @@ Pages and the CLI watcher subscribe with `watchEntityEvents` over a **WebSocket*
 | Someone holding the activist's phone | a list of passphrase-sealed blobs | addresses, roles, labels and vaults. Vaults are not stored on the phone; the app finds them on Arkiv after unlocking |
 | Someone forcing a check-in | a normal check-in, on the phone, on the vault page and on chain | that the duress passphrase was used: the key blob looks like any other, and the check-in note has the same size and shape as a normal one |
 
-Check-in timing stays visible to anyone watching the chain, and the RPC node sees the IP address a check-in comes from. An activist facing a capable adversary should check in over Tor or a VPN they already use, and at times they would be online anyway. The app says this before sealing.
+Expiry is not erasure: Arkiv keeps history, and an expired entity can still be read with `atBlock` at a block where it was alive (measured, friction F6). Everything Proof of Life stores is either ciphertext or meant to be public, so this changes nothing about what can be read, but an activist who lets a vault expire should know the ciphertext is not gone. It stays unreadable without `k` key pieces. Check-in timing stays visible to anyone watching the chain, and the RPC node sees the IP address a check-in comes from. An activist facing a capable adversary should check in over Tor or a VPN they already use, and at times they would be online anyway. The app says this before sealing.
 
 ## What stays off Arkiv, on purpose
 

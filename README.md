@@ -16,10 +16,11 @@ Built on [Arkiv](https://arkiv.network), the Web3 database, for **Arkiv: Global 
 | A vault whose heartbeat stops at **12:00 IST on 21 October**, during judging, and is then released by its custodians | [lapses-oct-21](https://proof-of-life-khaki.vercel.app/#/v/0x612ecb90f7fd74b4c11feeeeaeec9840841be40f5cab2a1d52235af64fd6270d/0x5D40aE116e255576B0D5F1FE706e3a236c59bDF1) |
 | **Pilot-2: the team cannot release it.** Two custodians, two needed: an outside person, unnamed by choice, holding a key we never see, and one demo key. Without the outside custodian's piece the vault stays sealed | [pilot-2](https://proof-of-life-khaki.vercel.app/#/v/0xad33705f0d1b3aa36b45ae52d42b6b78f933544fe056bdfab6c19c4710d07082/0x7C4E28e08183601dB2090Eb3F805c813d89c4B25) |
 | A pilot vault whose slot-1 custodian is an outside person, unnamed by choice, holding a key we never see. They confirmed custody from their own phone | [pilot](https://proof-of-life-khaki.vercel.app/#/v/0x54f8db01e47e3128e19b5ce5e746e8aabea9dc28cddbd8b5bb73431d9384a12f/0xa15eeDe179654Fe9807F39099392E084EDC9143f) |
+| One-file reader: save it anywhere, open a released vault with no site, server or install | [`reader.html`](reader.html) (also at [/reader.html](https://proof-of-life-khaki.vercel.app/reader.html)) |
 | Data contract | [`arkiv/schema.md`](arkiv/schema.md) |
 | Friction report | [`arkiv/friction.md`](arkiv/friction.md) |
 
-All documents in this build are synthetic and the network is a testnet.
+All documents in this build are synthetic and the network is a testnet. **Testnet versus real use:** this build proves the design end to end on Tiramisu. Real activists need a network that will still exist in a year; until Arkiv runs a mainnet, a vault's term is only as durable as the testnet it lives on. Nothing about the design changes on mainnet.
 
 ## The problem
 
@@ -97,8 +98,32 @@ The product falls apart without three Arkiv properties:
 | someone forces the activist to check in | the duress passphrase makes a check-in that is identical on chain; only the custodians can read that it means "release now" |
 | someone queries Arkiv for every vault | unlisted vaults have no project tag, no plain kinds and no numbers to range over; only a holder of the link can find one. Released evidence is deliberately findable |
 | someone takes the activist's phone | they find opaque encrypted blobs: no address, role, label or vault list without the passphrase (vaults are found on Arkiv by key, never stored on the phone) |
-| our website disappears | the CLI, the curl recipe and any other reader built from [`schema.md`](arkiv/schema.md) still work |
+| our website disappears | the one-file [`reader.html`](reader.html), the CLI, the curl recipe and any other reader built from [`schema.md`](arkiv/schema.md) still work |
 | someone watches the chain | they see random ids, ciphertext and check-in times, not names, titles or links between vaults. Check-in timing remains visible; the app says so before sealing |
+
+## Released evidence, readable by anyone
+
+A vault may stay unlisted while its heartbeat beats, but every released piece carries the project tag and its vault's creator. This one call lists every released vault, with no website involved:
+
+```bash
+curl -s https://rpc.tiramisu.db-chain.testnet.arkiv.network -H 'content-type: application/json' --data-binary @- <<'Q'
+{"jsonrpc":"2.0","id":1,"method":"arkiv_query","params":["project = str('proof-of-life') AND type = str('release')",{"select":{"key":true,"creator":true,"attributes":true},"limit":"0xc8"}]}
+Q
+```
+
+Each row's `vault_id` and `vault_creator` open the vault (`/#/v/<vault_id>/<vault_creator>`); `$creator` must be the custodian named for that slot in the manifest, which every reader checks. The CLI does the same with `proof-of-life released`.
+
+**The vault that stops during judging:** `lapses-oct-21` was sealed on 17 October in transactions [`0x21035f1e…`](https://tiramisu.explorer.arkiv.network/tx/0x21035f1ef9885badcb44f6cd9691b307e43f600d8dab8af0271dca7bea7c6af9) (ciphertext) and [`0xcac01637…`](https://tiramisu.explorer.arkiv.network/tx/0xcac016376c837a7408ee421a3fa05cea971ed1fa7bd872356bb08d9568982366) (manifest, envelopes and heartbeat). Its heartbeat stops at 12:00 IST on 21 October; the keeper's custodians then release it, and the release transactions appear on its page and in the call above.
+
+## Run your own custodian watcher
+
+A custodian does not need our website or our servers. On any machine with Node 20+:
+
+```bash
+npx github:YASASWIP012/proof-of-life watch <vault_id> <creator> --key-file my-custodian-backup.json --auto-release
+```
+
+It follows check-ins over a WebSocket, says when the activist is overdue, recognises a duress check-in, and publishes this custodian's piece the moment the heartbeat stops. `POL_PASSPHRASE` can hold the passphrase for unattended use.
 
 ## Reproduce it in three minutes
 

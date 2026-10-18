@@ -21,6 +21,7 @@ export default function CheckIn() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [jitter, setJitter] = useState(false);
 
   const load = async (keys: OpenKey[]) => {
     const found: Row[] = [];
@@ -38,6 +39,12 @@ export default function CheckIn() {
     setBusy(true);
     setErr(null);
     try {
+      // Someone watching the chain sees when check-ins land. A random delay keeps them from matching a routine.
+      if (jitter) {
+        const ms = (60 + Math.random() * 19 * 60) * 1000;
+        setDone(`Your check-in will go out in about ${Math.round(ms / 60000)} minutes. Keep this page open.`);
+        await new Promise((r) => setTimeout(r, ms));
+      }
       for (const r of rows ?? []) {
         const hb = r.view.heartbeat;
         if (!hb) continue;
@@ -72,6 +79,9 @@ export default function CheckIn() {
         <Button className="mt-4 w-full py-4 text-base" onClick={beat} disabled={busy || beating.length === 0}>
           {busy ? "Checking in…" : `I'm safe · check in ${beating.length} vault${beating.length === 1 ? "" : "s"}`}
         </Button>
+        <label className="mt-3 flex items-center justify-center gap-2 text-sm text-muted">
+          <input type="checkbox" checked={jitter} onChange={(e) => setJitter(e.target.checked)} /> Send at a random moment in the next 1 to 20 minutes
+        </label>
         {done && <p className="mt-3 text-sm">{done}</p>}
         {err && <div className="mt-3"><Notice tone="danger">{err}</Notice></div>}
         {beating.length === 0 && <div className="mt-3"><Notice tone="warn">No vault of these keys still has a heartbeat.</Notice></div>}

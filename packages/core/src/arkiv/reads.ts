@@ -330,7 +330,12 @@ export async function extendableKeys(client: PublicClient, view: VaultView, who:
     .createdBy(view.creator)
     .limit(200)
     .fetch();
-  const chunks = (page.entities as unknown as Row[]).map((r) => ({ key: r.key, expiresAt: r.expiresAt, owner: r.owner, permissionless: r.creationFlags.permissionlessExtension }));
+  const rows = [...(page.entities as unknown as Row[])];
+  for (let p = page; p.hasNextPage(); ) {
+    p = await p.next();
+    rows.push(...(p.entities as unknown as Row[]));
+  }
+  const chunks = rows.map((r) => ({ key: r.key, expiresAt: r.expiresAt, owner: r.owner, permissionless: r.creationFlags.permissionlessExtension }));
   return [...view.sealedKeys, ...chunks]
     .filter((e) => e.permissionless || (who === "activist" && same(e.owner, view.creator)))
     .map((e) => ({ key: e.key, expiresAt: e.expiresAt }));
