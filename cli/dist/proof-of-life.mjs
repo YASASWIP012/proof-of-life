@@ -50563,6 +50563,12 @@ function comparison(name, operator, input2) {
 function eq(name, value) {
   return comparison(name, "=", value);
 }
+function gte(name, value) {
+  return comparison(name, ">=", value);
+}
+function lte(name, value) {
+  return comparison(name, "<=", value);
+}
 function not(expression) {
   return node2({
     kind: "not",
@@ -51618,17 +51624,21 @@ var same = (a, b) => a.toLowerCase() === b.toLowerCase();
 var num2 = (r, name) => Number(r.attributes[name]?.value ?? NaN);
 var text = (r, name) => String(r.attributes[name]?.value ?? "");
 var isSealed = (r) => r.creationFlags.readonly && same(r.owner, SEAL_ADDRESS);
-async function loadVault(client, vaultId, creator, opts = {}) {
-  const rows = [];
-  let q = client.select(FIELDS).where(eq("vault_id", bytes32(vaultId)), not(eq("type", str("chunk"))), not(eq("type", str(kindTag(vaultId, "chunk"))))).limit(200);
-  if (opts.atBlock !== void 0) q = q.atBlock(opts.atBlock);
-  let page = await q.fetch();
-  rows.push(...page.entities);
-  while (page.hasNextPage()) {
+async function fetchAll(b, opts = {}) {
+  const max = opts.max ?? Infinity;
+  let page = await (opts.atBlock !== void 0 ? b.atBlock(opts.atBlock) : b).fetch();
+  if (page.hasNextPage() && opts.atBlock === void 0) page = await b.atBlock(page.blockNumber).fetch();
+  const rows = [...page.entities];
+  while (page.hasNextPage() && rows.length < max) {
     page = await page.next();
     rows.push(...page.entities);
   }
-  return assembleVault(rows, vaultId, creator, page.blockNumber);
+  return { rows, blockNumber: page.blockNumber };
+}
+async function loadVault(client, vaultId, creator, opts = {}) {
+  const q = client.select(FIELDS).where(eq("vault_id", bytes32(vaultId)), not(eq("type", str("chunk"))), not(eq("type", str(kindTag(vaultId, "chunk"))))).limit(200);
+  const { rows, blockNumber } = await fetchAll(q, { atBlock: opts.atBlock });
+  return assembleVault(rows, vaultId, creator, blockNumber);
 }
 var VaultNotFound = class extends Error {
   constructor(vaultId, creator) {
@@ -51723,13 +51733,9 @@ function assembleVault(rows, vaultId, creator, head) {
   };
 }
 async function loadCiphertext(client, view) {
-  const rows = [];
-  let page = await client.select(FIELDS).where(eq("vault_id", bytes32(view.vaultId)), or(eq("type", str("chunk")), eq("type", str(kindTag(view.vaultId, "chunk"))))).createdBy(view.creator).limit(50).fetch();
-  rows.push(...page.entities);
-  while (page.hasNextPage()) {
-    page = await page.next();
-    rows.push(...page.entities);
-  }
+  const { rows } = await fetchAll(
+    client.select(FIELDS).where(eq("vault_id", bytes32(view.vaultId)), or(eq("type", str("chunk")), eq("type", str(kindTag(view.vaultId, "chunk"))))).createdBy(view.creator).limit(50)
+  );
   const hashes = view.manifest.chunks.hashes;
   const byIdx = /* @__PURE__ */ new Map();
   for (const r of rows.sort((a, b) => Number(a.createdAt - b.createdAt))) {
@@ -51744,21 +51750,22 @@ async function loadCiphertext(client, view) {
 }
 async function listVaults(client, opts = {}) {
   const walk3 = async (b) => {
-    let page = await b.fetch();
-    const entities = [...page.entities];
-    while (page.hasNextPage() && entities.length < 2e3) {
-      page = await page.next();
-      entities.push(...page.entities);
-    }
-    return { entities, blockNumber: page.blockNumber };
+    const { rows, blockNumber } = await fetchAll(b, { max: 2e3 });
+    return { entities: rows, blockNumber };
   };
   const fields = { key: true, creator: true, createdAt: true, expiresAt: true, attributes: true, payload: true };
   let all;
   if (opts.creator) {
     all = await walk3(client.select(fields).where(eq("$creator", addr(opts.creator))).limit(opts.limit ?? 200));
   } else {
-    const parts = await Promise.all(["vault", "heartbeat", "release"].map((t) => walk3(client.select(fields).where(eq("project", str(PROJECT)), eq("type", str(t))).limit(opts.limit ?? 200))));
+    const head = opts.stopsWithinS !== void 0 ? await client.getBlockNumber() : 0n;
+    const extra = (t) => t === "heartbeat" && opts.stopsWithinS !== void 0 ? [lte("$expiresAt", u64(head + BigInt(Math.ceil(opts.stopsWithinS / BLOCK_SECONDS))))] : t === "vault" && opts.rhythmAtLeastS !== void 0 ? [gte("interval_s", u64(BigInt(opts.rhythmAtLeastS)))] : [];
+    const parts = await Promise.all(["vault", "heartbeat", "release"].map((t) => walk3(client.select(fields).where(eq("project", str(PROJECT)), eq("type", str(t)), ...extra(t)).limit(opts.limit ?? 200))));
     all = { entities: parts.flatMap((p) => p.entities), blockNumber: parts[0].blockNumber };
+    if (opts.stopsWithinS !== void 0) {
+      const live = new Set(parts[1].entities.map((h) => `${text(h, "vault_id")}:${h.creator.toLowerCase()}`));
+      all.entities = all.entities.filter((r) => kindOf(text(r, "type"), text(r, "vault_id")) !== "vault" || live.has(`${text(r, "vault_id")}:${r.creator.toLowerCase()}`));
+    }
   }
   const kindRow = (r) => kindOf(text(r, "type"), text(r, "vault_id"));
   const beatOf = /* @__PURE__ */ new Map();
@@ -51792,12 +51799,7 @@ async function listVaults(client, opts = {}) {
   };
 }
 async function listReleased(client) {
-  let page = await client.select({ creator: true, createdAt: true, attributes: true }).where(eq("project", str(PROJECT)), eq("type", str("release"))).limit(200).fetch();
-  const rows = [...page.entities];
-  while (page.hasNextPage() && rows.length < 2e3) {
-    page = await page.next();
-    rows.push(...page.entities);
-  }
+  const { rows } = await fetchAll(client.select({ creator: true, createdAt: true, attributes: true }).where(eq("project", str(PROJECT)), eq("type", str("release"))).limit(200), { max: 2e3 });
   const by = /* @__PURE__ */ new Map();
   for (const r of rows) {
     const creator = r.attributes.vault_creator?.value;
@@ -52091,7 +52093,8 @@ async function main() {
   const [cmd, vaultId, creator] = args;
   switch (cmd) {
     case "vaults": {
-      const { head, vaults } = await listVaults(reader);
+      const days = (f) => flag(f) ? Number(String(flag(f)).replace(/d$/, "")) * 86400 : void 0;
+      const { head, vaults } = await listVaults(reader, { stopsWithinS: days("stops-within"), rhythmAtLeastS: days("rhythm-at-least") });
       for (const v of vaults) {
         const s = vaultStatus({ head, heartbeatExpiresAt: v.heartbeatExpiresAt, graceS: v.graceS, k: v.k, validReleases: v.releases });
         log(`${s.phase.padEnd(9)} ${v.vaultId} ${v.creator} ${v.k}/${v.n}`);
@@ -52171,7 +52174,8 @@ async function main() {
     default:
       log(`proof-of-life: dead-hand vaults on Arkiv
 
-  proof-of-life vaults                                   list listed vaults and their phase
+  proof-of-life vaults [--stops-within 3d] [--rhythm-at-least 7d]
+                                                         list listed vaults and their phase; the filters are range queries run on the node
   proof-of-life released                                 list released evidence, including vaults unlisted while alive
   proof-of-life status  <vault_id> <creator> [--at N]    phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released); --at reads it as of block N
   proof-of-life watch   <vault_id> <creator> [--key-file f --auto-release --once]

@@ -155,11 +155,12 @@ These match the docs, so they are not defects. We list what we expected, what we
 | One 96 KiB ciphertext chunk, sealed | 3,967,360 | 0.00397 |
 | Manifest + 3 envelopes + heartbeat, sealed | 680,792 | 0.00068 |
 | Custodian acknowledgement | 105,384 | 0.00011 |
-| Check-in (extend heartbeat) | 25,180 | 0.000025 |
+| Check-in, heartbeat only (the demo keeper, which writes no note) | 25,180 | 0.000025 |
+| Check-in with its encrypted beat note, 3 custodians (`0xb3bb2783…b135`, block 701784; a forced check-in costs the same) | 114,080 | 0.00011 |
 | Release (create + seal) | 127,720 | 0.00013 |
 | 32 KiB entity for 1, 30 or 365 days | ~1,340,000 | 0.00134 (F3) |
 
-Gas tracks payload size and does not depend on lifetime. A weekly check-in for a year costs about 0.0013 GLM.
+Gas tracks payload size and does not depend on lifetime. A weekly check-in with its note costs about 0.006 GLM a year.
 
 ## The one thing Arkiv should improve first
 

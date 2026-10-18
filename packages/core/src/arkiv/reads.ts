@@ -1,6 +1,6 @@
 // Reading a vault. Trust never comes from an attribute: every entity is checked against its on-chain $creator.
-import { bytes32, str, addr as addrAttr } from "@arkiv-network/sdk/attr";
-import { eq, not } from "@arkiv-network/sdk/query";
+import { bytes32, str, u64, addr as addrAttr } from "@arkiv-network/sdk/attr";
+import { eq, gte, lte, not } from "@arkiv-network/sdk/query";
 import type { Hex } from "viem";
 import { getAddress } from "viem";
 import { hexToBytes } from "../crypto/bytes.js";
@@ -9,6 +9,7 @@ import type { PublicClient } from "./client.js";
 import { kindOf, kindTag, Manifest, PROJECT, ReleasePayload, SEAL_ADDRESS } from "./schema.js";
 import { sha256Hex } from "../crypto/vault.js";
 import { or } from "@arkiv-network/sdk/query";
+import { BLOCK_SECONDS } from "./schema.js";
 import { vaultStatus, type Status } from "./status.js";
 
 const FIELDS = { key: true, owner: true, creator: true, createdAt: true, expiresAt: true, creationFlags: true, attributes: true, payload: true } as const;
@@ -57,22 +58,33 @@ export type VaultView = {
 
 const isSealed = (r: Row) => r.creationFlags.readonly && same(r.owner, SEAL_ADDRESS);
 
-/** One query loads everything but the ciphertext, which keeps a page view inside the keyless read budget. */
+type Pageable = { atBlock(block: bigint): Pageable; fetch(): Promise<{ entities: unknown[]; blockNumber: bigint; hasNextPage(): boolean; next(): Promise<any> }> };
+
+/**
+ * Every page of one query, read at one block. A single page (the usual case) costs one query. When there are more,
+ * the walk restarts pinned with `atBlock` to the first page's block, so no row can shift between pages and a new
+ * block cannot invalidate the cursor halfway.
+ */
+async function fetchAll<T = Row>(b: Pageable, opts: { atBlock?: bigint; max?: number } = {}): Promise<{ rows: T[]; blockNumber: bigint }> {
+  const max = opts.max ?? Infinity;
+  let page = await (opts.atBlock !== undefined ? b.atBlock(opts.atBlock) : b).fetch();
+  if (page.hasNextPage() && opts.atBlock === undefined) page = await b.atBlock(page.blockNumber).fetch();
+  const rows = [...page.entities] as T[];
+  while (page.hasNextPage() && rows.length < max) {
+    page = await page.next();
+    rows.push(...(page.entities as T[]));
+  }
+  return { rows, blockNumber: page.blockNumber };
+}
+
 /**
  * One query loads everything but the ciphertext. With `atBlock`, the same query reads the vault as it stood at a
  * past block, so anyone can show the heartbeat was alive (or already gone) at a given moment.
  */
 export async function loadVault(client: PublicClient, vaultId: Hex, creator: Hex, opts: { atBlock?: bigint } = {}): Promise<VaultView> {
-  const rows: Row[] = [];
-  let q = client.select(FIELDS).where(eq("vault_id", bytes32(vaultId)), not(eq("type", str("chunk"))), not(eq("type", str(kindTag(vaultId, "chunk"))))).limit(200);
-  if (opts.atBlock !== undefined) q = q.atBlock(opts.atBlock);
-  let page = await q.fetch();
-  rows.push(...(page.entities as unknown as Row[]));
-  while (page.hasNextPage()) {
-    page = await page.next();
-    rows.push(...(page.entities as unknown as Row[]));
-  }
-  return assembleVault(rows, vaultId, creator, page.blockNumber);
+  const q = client.select(FIELDS).where(eq("vault_id", bytes32(vaultId)), not(eq("type", str("chunk"))), not(eq("type", str(kindTag(vaultId, "chunk"))))).limit(200);
+  const { rows, blockNumber } = await fetchAll(q as unknown as Pageable, { atBlock: opts.atBlock });
+  return assembleVault(rows, vaultId, creator, blockNumber);
 }
 
 export class VaultNotFound extends Error {
@@ -187,18 +199,13 @@ export function assembleVault(rows: Row[], vaultId: Hex, creator: Hex, head: big
 
 /** The ciphertext, read only when someone opens a released vault. Chunks from any other creator are ignored. */
 export async function loadCiphertext(client: PublicClient, view: VaultView): Promise<{ ciphertext: Uint8Array; keys: { key: Hex; expiresAt: bigint }[] }> {
-  const rows: Row[] = [];
-  let page = await client
-    .select(FIELDS)
-    .where(eq("vault_id", bytes32(view.vaultId)), or(eq("type", str("chunk")), eq("type", str(kindTag(view.vaultId, "chunk")))))
-    .createdBy(view.creator)
-    .limit(50)
-    .fetch();
-  rows.push(...(page.entities as unknown as Row[]));
-  while (page.hasNextPage()) {
-    page = await page.next();
-    rows.push(...(page.entities as unknown as Row[]));
-  }
+  const { rows } = await fetchAll(
+    client
+      .select(FIELDS)
+      .where(eq("vault_id", bytes32(view.vaultId)), or(eq("type", str("chunk")), eq("type", str(kindTag(view.vaultId, "chunk")))))
+      .createdBy(view.creator)
+      .limit(50) as unknown as Pageable,
+  );
   // Listed chunks carry an index; unlisted ones are placed by matching their hash to the manifest's list.
   const hashes = view.manifest.chunks.hashes;
   const byIdx = new Map<number, Row>();
@@ -215,16 +222,16 @@ export async function loadCiphertext(client: PublicClient, view: VaultView): Pro
 
 export type VaultSummary = { key: Hex; vaultId: Hex; creator: Hex; tag?: string; k: number; n: number; mode: string; createdAt: bigint; heartbeatExpiresAt: bigint | null; graceS: number; releases: number };
 
-/** The public directory: two queries for every vault and every live heartbeat. */
-export async function listVaults(client: PublicClient, opts: { creator?: Hex; limit?: number } = {}): Promise<{ head: bigint; vaults: VaultSummary[] }> {
-  const walk = async (b: { fetch: () => Promise<any> }) => {
-    let page = await b.fetch();
-    const entities: Row[] = [...page.entities];
-    while (page.hasNextPage() && entities.length < 2000) {
-      page = await page.next();
-      entities.push(...page.entities);
-    }
-    return { entities, blockNumber: page.blockNumber as bigint };
+/**
+ * The public directory: one query per kind (vault, heartbeat, release). Two filters run on the node, over typed
+ * numbers: `stopsWithinS` keeps vaults whose heartbeat expires within that many seconds (`$expiresAt <= head + n`,
+ * a range on the heartbeat), and `rhythmAtLeastS` keeps vaults whose check-in interval is at least that long
+ * (`interval_s >= …`, a range on the vault). Listed vaults only; unlisted ones carry no numbers to range over.
+ */
+export async function listVaults(client: PublicClient, opts: { creator?: Hex; limit?: number; stopsWithinS?: number; rhythmAtLeastS?: number } = {}): Promise<{ head: bigint; vaults: VaultSummary[] }> {
+  const walk = async (b: unknown) => {
+    const { rows, blockNumber } = await fetchAll(b as Pageable, { max: 2000 });
+    return { entities: rows, blockNumber };
   };
   const fields = { key: true, creator: true, createdAt: true, expiresAt: true, attributes: true, payload: true } as const;
   let all: { entities: Row[]; blockNumber: bigint };
@@ -232,8 +239,20 @@ export async function listVaults(client: PublicClient, opts: { creator?: Hex; li
     // One key seals one vault, so everything this key wrote is small. Hashed (unlisted) kinds are recognised here.
     all = await walk(client.select(fields).where(eq("$creator", addrAttr(opts.creator))).limit(opts.limit ?? 200));
   } else {
-    const parts = await Promise.all(["vault", "heartbeat", "release"].map((t) => walk(client.select(fields).where(eq("project", str(PROJECT)), eq("type", str(t))).limit(opts.limit ?? 200))));
+    const head = opts.stopsWithinS !== undefined ? await client.getBlockNumber() : 0n;
+    const extra = (t: string) =>
+      t === "heartbeat" && opts.stopsWithinS !== undefined
+        ? [lte("$expiresAt", u64(head + BigInt(Math.ceil(opts.stopsWithinS / BLOCK_SECONDS))))]
+        : t === "vault" && opts.rhythmAtLeastS !== undefined
+          ? [gte("interval_s", u64(BigInt(opts.rhythmAtLeastS)))]
+          : [];
+    const parts = await Promise.all(["vault", "heartbeat", "release"].map((t) => walk(client.select(fields).where(eq("project", str(PROJECT)), eq("type", str(t)), ...extra(t)).limit(opts.limit ?? 200))));
     all = { entities: parts.flatMap((p) => p.entities), blockNumber: parts[0].blockNumber };
+    if (opts.stopsWithinS !== undefined) {
+      // Only vaults with a heartbeat inside the window remain.
+      const live = new Set(parts[1].entities.map((h) => `${text(h, "vault_id")}:${h.creator.toLowerCase()}`));
+      all.entities = all.entities.filter((r) => kindOf(text(r, "type"), text(r, "vault_id") as Hex) !== "vault" || live.has(`${text(r, "vault_id")}:${r.creator.toLowerCase()}`));
+    }
   }
   const kindRow = (r: Row) => kindOf(text(r, "type"), text(r, "vault_id") as Hex);
   const beatOf = new Map<string, bigint>();
@@ -269,12 +288,8 @@ export async function listVaults(client: PublicClient, opts: { creator?: Hex; li
 
 /** Envelopes addressed to one custodian key, across every vault. */
 export async function envelopesFor(client: PublicClient, custodian: Hex) {
-  const page = await client
-    .select({ key: true, creator: true, createdAt: true, attributes: true })
-    .where(eq("custodian", addrAttr(custodian)))
-    .limit(200)
-    .fetch();
-  return (page.entities as unknown as Row[]).filter((r) => kindOf(text(r, "type"), text(r, "vault_id") as Hex) === "envelope").map((r) => ({ key: r.key, vaultId: text(r, "vault_id") as Hex, creator: getAddress(r.creator), slot: num(r, "slot"), createdAt: r.createdAt }));
+  const { rows } = await fetchAll(client.select({ key: true, creator: true, createdAt: true, attributes: true }).where(eq("custodian", addrAttr(custodian))).limit(200) as unknown as Pageable, { max: 2000 });
+  return rows.filter((r) => kindOf(text(r, "type"), text(r, "vault_id") as Hex) === "envelope").map((r) => ({ key: r.key, vaultId: text(r, "vault_id") as Hex, creator: getAddress(r.creator), slot: num(r, "slot"), createdAt: r.createdAt }));
 }
 
 /** The exact query strings a reader can paste anywhere to check a vault without this app. */
@@ -295,16 +310,7 @@ export type ReleasedVault = { vaultId: Hex; creator: Hex; pieces: number; firstB
  * even when the vault was unlisted while alive. Counts are raw; open a vault to see which pieces pass their checks.
  */
 export async function listReleased(client: PublicClient): Promise<ReleasedVault[]> {
-  let page = await client
-    .select({ creator: true, createdAt: true, attributes: true })
-    .where(eq("project", str(PROJECT)), eq("type", str("release")))
-    .limit(200)
-    .fetch();
-  const rows = [...(page.entities as unknown as Row[])];
-  while (page.hasNextPage() && rows.length < 2000) {
-    page = await page.next();
-    rows.push(...(page.entities as unknown as Row[]));
-  }
+  const { rows } = await fetchAll(client.select({ creator: true, createdAt: true, attributes: true }).where(eq("project", str(PROJECT)), eq("type", str("release"))).limit(200) as unknown as Pageable, { max: 2000 });
   const by = new Map<string, ReleasedVault>();
   for (const r of rows) {
     const creator = r.attributes.vault_creator?.value as Hex | undefined;
@@ -324,17 +330,13 @@ export async function listReleased(client: PublicClient): Promise<ReleasedVault[
  * carries the ciphertext forward too and never includes a key whose extension would revert the whole batch.
  */
 export async function extendableKeys(client: PublicClient, view: VaultView, who: "activist" | "anyone"): Promise<{ key: Hex; expiresAt: bigint }[]> {
-  const page = await client
-    .select({ key: true, owner: true, expiresAt: true, creationFlags: true })
-    .where(eq("vault_id", bytes32(view.vaultId)), or(eq("type", str("chunk")), eq("type", str(kindTag(view.vaultId, "chunk")))))
-    .createdBy(view.creator)
-    .limit(200)
-    .fetch();
-  const rows = [...(page.entities as unknown as Row[])];
-  for (let p = page; p.hasNextPage(); ) {
-    p = await p.next();
-    rows.push(...(p.entities as unknown as Row[]));
-  }
+  const { rows } = await fetchAll(
+    client
+      .select({ key: true, owner: true, expiresAt: true, creationFlags: true })
+      .where(eq("vault_id", bytes32(view.vaultId)), or(eq("type", str("chunk")), eq("type", str(kindTag(view.vaultId, "chunk")))))
+      .createdBy(view.creator)
+      .limit(200) as unknown as Pageable,
+  );
   const chunks = rows.map((r) => ({ key: r.key, expiresAt: r.expiresAt, owner: r.owner, permissionless: r.creationFlags.permissionlessExtension }));
   return [...view.sealedKeys, ...chunks]
     .filter((e) => e.permissionless || (who === "activist" && same(e.owner, view.creator)))

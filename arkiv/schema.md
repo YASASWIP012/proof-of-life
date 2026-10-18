@@ -29,7 +29,7 @@ Every entity carries these four attributes:
 | `heartbeat` | activist | `interval_s` `u64`, `grace_s` `u64` | empty | readonly, **not** permissionless | activist | `interval_s + grace_s`, reset by every check-in |
 | `beat` | activist | none | the check-in's 16-byte token encrypted to each custodian, fixed size (`n` × 77 bytes) | readonly | activist | `interval_s + grace_s`, one per check-in |
 | `ack` | custodian | `slot` `i32` | empty | readonly | custodian | 14 days, reset by the custodian's watcher |
-| `release` | custodian | `slot` `i32` | JSON: the share (or the share encrypted to a newsroom) | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
+| `release` | custodian | `project` `str` and plain `type = str('release')` on every release, listed vault or not; `slot` `i32`; `vault_creator` `addr` (the vault's creator, so released evidence is findable from the chain alone) | JSON: the share (or the share encrypted to a newsroom) | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
 
 ### Why each lifetime is what it is
 
@@ -95,12 +95,18 @@ Readers (web app, CLI, any third party) apply these rules. Anything that fails i
 | The ciphertext, only from the vault's creator, paginated with a cursor | `vault_id = bytes32(V) AND type = str('chunk')` + `.createdBy(C)` | `loadCiphertext` |
 | Released evidence, including vaults unlisted while alive | `project = str('proof-of-life') AND type = str('release')`, grouped by `vault_id` and `vault_creator` |
 | A vault as it stood at a past block (proof it was alive then) | the vault query with `.atBlock(N)` |
-| Listed vaults for the directory, every page walked with the cursor | `project = str('proof-of-life') AND type = str('vault')`, plus the same for `heartbeat` and `release` |
+| Listed vaults for the directory, every page walked with the cursor pinned to one block | `project = str('proof-of-life') AND type = str('vault')`, plus the same for `heartbeat` and `release` | `listVaults` |
+| Vaults about to stop (directory filter "Stops within 3 days", `vaults --stops-within 3d`) | `project = str('proof-of-life') AND type = str('heartbeat') AND $expiresAt <= u64(head + 129600)`, a range on the heartbeat's own expiry | `listVaults({ stopsWithinS })` |
+| Vaults with a slow rhythm (filter "Weekly check-in or slower", `--rhythm-at-least 7d`) | `project = str('proof-of-life') AND type = str('vault') AND interval_s >= u64(604800)` | `listVaults({ rhythmAtLeastS })` |
 | One activist key's own vaults, listed or not (check-in page) | `$creator = addr(key)`, kinds recognised by `kindOf` | `listVaults` |
 | Envelopes addressed to one custodian key | `custodian = addr(A)`, kinds recognised by `kindOf` | `envelopesFor` |
 | Is this heartbeat alive? | `… AND type = str('heartbeat') AND $creator = addr(C)` and compare `$expiresAt` with the head | vault page "Check this without us" panel |
 
 Arkiv has no server-side ordering, so chunks are ordered by their `idx` attribute and releases by `$createdAt` on the client.
+
+**Pagination.** Every multi-page read goes through one helper (`fetchAll` in [`reads.ts`](../packages/core/src/arkiv/reads.ts)). A single page costs one query. When there are more, the walk restarts with `.atBlock()` set to the first page's block, so no row moves between pages and a new block cannot invalidate the cursor halfway.
+
+**What the typed numbers on a listed vault are for.** `interval_s` and the heartbeat's `$expiresAt` are ranged over by the two directory filters above. `k`, `n` and `mode` are read straight from attributes to draw the directory and the CLI's `vaults` list without decoding any payload. `chunks` and `sealed_at_ms` let a third party size or date a vault from attributes alone, for example `chunks >= i32(2)`. We do not run that last query ourselves.
 
 ## Live updates
 

@@ -97,7 +97,8 @@ async function main() {
   const [cmd, vaultId, creator] = args as [string, Hex, Hex];
   switch (cmd) {
     case "vaults": {
-      const { head, vaults } = await listVaults(reader);
+      const days = (f: string) => (flag(f) ? Number(String(flag(f)).replace(/d$/, "")) * 86_400 : undefined);
+      const { head, vaults } = await listVaults(reader, { stopsWithinS: days("stops-within"), rhythmAtLeastS: days("rhythm-at-least") });
       for (const v of vaults) {
         const s = vaultStatus({ head, heartbeatExpiresAt: v.heartbeatExpiresAt, graceS: v.graceS, k: v.k, validReleases: v.releases });
         log(`${s.phase.padEnd(9)} ${v.vaultId} ${v.creator} ${v.k}/${v.n}`);
@@ -179,7 +180,8 @@ async function main() {
     default:
       log(`proof-of-life: dead-hand vaults on Arkiv
 
-  proof-of-life vaults                                   list listed vaults and their phase
+  proof-of-life vaults [--stops-within 3d] [--rhythm-at-least 7d]
+                                                         list listed vaults and their phase; the filters are range queries run on the node
   proof-of-life released                                 list released evidence, including vaults unlisted while alive
   proof-of-life status  <vault_id> <creator> [--at N]    phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released); --at reads it as of block N
   proof-of-life watch   <vault_id> <creator> [--key-file f --auto-release --once]

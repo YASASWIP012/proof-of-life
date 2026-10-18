@@ -81,7 +81,7 @@ The product falls apart without three Arkiv properties:
 | `$creator` / `$owner` + ownership transfer | sealing to `0x…dEaD` in the creating batch; trust rules in [`reads.ts`](packages/core/src/arkiv/reads.ts) `assembleVault` | "Sealed: read-only and owned by an address nobody holds"; an **Ignored entities** list for forgeries |
 | Atomic batch writes | each chunk is created and sealed in one batch; manifest + envelopes + heartbeat in one batch; each check-in extends the heartbeat and writes its `beat` note together | the vault appears whole, with its clock started, in one block; a duress check-in is indistinguishable from a normal one |
 | Typed attributes vs payload | `u64` lifetimes and timestamps, `i32` slots, `bytes32` vault ids, `addr` custodians; ciphertext and manifests in payloads | one query loads a whole vault |
-| Queries: compound, `NOT`, `createdBy`, cursor | `vault_id = … AND NOT (type = 'chunk')`; chunks with `createdBy(creator)` and cursor pagination | a vault page costs one read, so it stays inside the keyless budget |
+| Queries: compound, `NOT`, ranges, `createdBy`, cursor pinned with `atBlock` | `vault_id = … AND NOT (type = 'chunk')`; chunks with `createdBy(creator)`; ranges `$expiresAt <= u64(…)` and `interval_s >= u64(…)` ([`reads.ts`](packages/core/src/arkiv/reads.ts) `listVaults`) | a vault page costs one read, so it stays inside the keyless budget; the directory's "Stops within 3 days" filter runs on the node |
 | WebSocket entity events | `watchEntityEvents` on `wss://`, no `fromBlock` ([`events.ts`](packages/core/src/arkiv/events.ts)) | check-ins and releases appear live; the lapse is caught by a timer set from the heartbeat's own expiry block, because Arkiv fires no expiry event |
 
 ## Threat model, briefly
