@@ -5,7 +5,7 @@ import { ackCustody, checkIn, loadVault, publicClient, releaseMyShare, walletCli
 import { account, rpc } from "./env.js";
 
 const reader = publicClient({ rpc });
-const registry = JSON.parse(readFileSync(new URL("./demo-vaults.json", import.meta.url), "utf8")) as Record<string, { vaultId: `0x${string}`; creator: `0x${string}`; activist: number; custodians: number[]; checkIn: boolean }>;
+const registry = JSON.parse(readFileSync(new URL("./demo-vaults.json", import.meta.url), "utf8")) as Record<string, { vaultId: `0x${string}`; creator: `0x${string}`; activist: number; custodians: (number | null)[]; checkIn: boolean }>;
 const DAY_BLOCKS = 43_200n;
 
 for (const [name, r] of Object.entries(registry)) {
@@ -22,6 +22,8 @@ for (const [name, r] of Object.entries(registry)) {
     console.log(`  checked in ${tx.txHash}`);
   }
   for (const [i, idx] of r.custodians.entries()) {
+    // null marks a slot held by an outside person: the keeper never holds that key.
+    if (idx === null) continue;
     const c = account(idx);
     const ack = v.acks.find((a) => a.slot === i + 1);
     const released = v.releases.some((x) => x.slot === i + 1 && x.valid);

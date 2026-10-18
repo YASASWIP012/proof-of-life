@@ -10,7 +10,7 @@ mkdirSync(OUT, { recursive: true });
 const demo = JSON.parse(readFileSync(new URL("../scripts/demo-vaults.json", import.meta.url), "utf8"));
 const vp = (v) => `${SITE}/#/v/${v.vaultId}/${v.creator}`;
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ channel: "chrome", headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, recordVideo: { dir: OUT, size: { width: 1440, height: 900 } } });
 const page = await ctx.newPage();
 const t0 = Date.now();
@@ -74,35 +74,59 @@ await wait(5000);
 // 5. Terminal: the real CLI output, shown in a terminal frame.
 mark("cli");
 const rel = demo.released;
-const cli = execFileSync("node", [new URL("../cli/dist/proof-of-life.mjs", import.meta.url).pathname, "status", rel.vaultId, rel.creator], { encoding: "utf8" }).trimEnd();
-let open = "";
-try {
-  open = execFileSync("node", [new URL("../cli/dist/proof-of-life.mjs", import.meta.url).pathname, "open", rel.vaultId, rel.creator, "--out", "/tmp/pol-video-open"], { encoding: "utf8" }).trimEnd();
-} catch (e) {
-  open = String(e.stdout ?? "");
-}
+// The CLI's exit code is the vault phase (4 = released), so read stdout whatever the code is.
+const runCli = (...args) => {
+  try {
+    return execFileSync("node", [new URL("../cli/dist/proof-of-life.mjs", import.meta.url).pathname, ...args], { encoding: "utf8" }).trimEnd();
+  } catch (e) {
+    return String(e.stdout ?? "").trimEnd();
+  }
+};
+const cli = runCli("status", rel.vaultId, rel.creator);
+const open = runCli("open", rel.vaultId, rel.creator, "--out", "/tmp/pol-video-open");
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-await page.setContent(`<html><body style="margin:0;background:linear-gradient(160deg,#2A2F5C,#16182B);height:100vh;display:grid;place-items:center;font-family:Inter,system-ui">
+// The terminal is drawn as an overlay on the live site, so the page itself never changes and later scenes navigate normally.
+await page.evaluate((html) => {
+  const d = document.createElement("div");
+  d.id = "term-overlay";
+  d.style.cssText = "position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#2A2F5C,#16182B);display:grid;place-items:center;font-family:Inter,system-ui";
+  d.innerHTML = html;
+  document.body.appendChild(d);
+}, `
 <div style="width:1100px;border-radius:14px;overflow:hidden;box-shadow:0 40px 90px -30px rgba(0,0,0,.6)">
 <div style="height:38px;background:#26262B;display:flex;align-items:center;gap:8px;padding:0 14px"><i style="width:12px;height:12px;border-radius:50%;background:#FF5F57"></i><i style="width:12px;height:12px;border-radius:50%;background:#FEBC2E"></i><i style="width:12px;height:12px;border-radius:50%;background:#28C840"></i><span style="margin-left:auto;margin-right:auto;color:#9A9AA2;font-size:13px">Terminal · no website involved</span></div>
-<pre id="t" style="margin:0;background:#121318;color:#EEF0F6;font:15px/1.6 'JetBrains Mono',ui-monospace,monospace;padding:24px;min-height:520px;white-space:pre-wrap"></pre></div></body></html>`);
+<pre id="t" style="margin:0;background:#121318;color:#EEF0F6;font:15px/1.6 'JetBrains Mono',ui-monospace,monospace;padding:24px;min-height:520px;white-space:pre-wrap"></pre></div>`);
 const lines = [`$ npx github:YASASWIP012/proof-of-life status ${rel.vaultId.slice(0, 18)}… ${rel.creator.slice(0, 10)}…`, ...cli.split("\n"), "", `$ npx github:YASASWIP012/proof-of-life open ${rel.vaultId.slice(0, 18)}… ${rel.creator.slice(0, 10)}…`, ...open.split("\n")];
 for (const l of lines) {
   await page.evaluate((x) => (document.getElementById("t").textContent += x + "\n"), l);
   await wait(l.startsWith("$") ? 900 : 180);
 }
 await wait(3000);
+await page.evaluate(() => document.getElementById("term-overlay")?.remove());
 
 // 6. Safety: the duress passphrase and what an observer sees.
 mark("safety");
+// Later scenes never abort the recording: a failed step is logged and the camera keeps rolling.
+const soft = async (label, fn) => {
+  try {
+    await fn();
+  } catch (e) {
+    console.log(`skipped ${label}: ${String(e.message).split("\n")[0]}`);
+  }
+};
 await page.goto(`${SITE}/#/new`, { waitUntil: "networkidle" });
-await wait(1500);
-await page.getByText("Duress passphrase").scrollIntoViewIfNeeded();
-await page.getByText("Duress passphrase").hover();
+await soft("duress field", async () => {
+  const label = page.getByText("Duress passphrase (optional)", { exact: true });
+  await label.waitFor({ timeout: 15000 });
+  await label.scrollIntoViewIfNeeded();
+  await label.hover();
+});
 await wait(7000);
 await page.goto(`${SITE}/#/`, { waitUntil: "networkidle" });
-await glide(await yOf(".faq"), 2500);
-await page.getByText("What if someone forces me to check in?").click();
+await soft("faq", async () => {
+  await glide(await yOf(".faq"), 2500);
+  await page.getByText("What if someone forces me to check in?", { exact: true }).click({ timeout: 15000 });
+});
 await wait(7000);
 
 // 7. Close: the vault that stops during judging, then the home page.

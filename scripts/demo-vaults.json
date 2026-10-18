@@ -31,5 +31,16 @@
       232
     ],
     "checkIn": false
+  },
+  "pilot": {
+    "vaultId": "0x54f8db01e47e3128e19b5ce5e746e8aabea9dc28cddbd8b5bb73431d9384a12f",
+    "creator": "0xa15eeDe179654Fe9807F39099392E084EDC9143f",
+    "activist": 104,
+    "custodians": [
+      null,
+      241,
+      242
+    ],
+    "checkIn": true
   }
 }
