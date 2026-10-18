@@ -60,16 +60,9 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 - **Why it matters:** we designed the vault term around paying for time (short lifetimes plus carry-forward on each check-in). On Tiramisu today, a 365-day lifetime costs the same as a 1-day one, so the "pay for what you keep" advice does not hold. Either the docs describe future pricing or testnet pricing differs; the docs should say which.
 - **What would fix it:** one line on the Tiramisu page saying whether lifetime is priced on this network.
 
-### F4. The faucet needs a browser wallet and a person, so project wallets cannot be funded from a script
-
-- **Surface:** Hub faucet (`hub.arkiv.network/faucet`) with a MetaMask wallet in Chrome, 17 October 2026.
-- **Steps:** open the faucet page; it asks to connect a wallet and then to "Sign in with Ethereum" before any form appears; after signing, it shows "Send to", the network (Tiramisu testnet), "10 testnet $GLM per claim", a "Verify you're human" check and a claim button; after claiming, the button reads "Next claim in 58m".
-- **Expected:** paste an address, pass a human check, receive GLM.
-- **Actual:** the faucet first needs a connected browser wallet and Sign-In with Ethereum. After that it does offer "Use a different address", but only on the second screen; we found it after transferring by hand. One claim per wallet per hour, 10 GLM per claim.
-- **What we did:** one claim to a MetaMask wallet, one transfer to a project treasury, and every other wallet derived from one mnemonic ([`scripts/env.ts`](../scripts/env.ts), [`scripts/fund.ts`](../scripts/fund.ts)). Those 10 GLM covered the whole build: every probe, four end-to-end runs, demo seeding and the gas tap judges use.
-- **What would fix it:** show "Use a different address" on the first screen, and put the 10 GLM per hour per wallet numbers on the Tiramisu page.
-
 ---
+
+(F4, the faucet, is now D3 below: it works as designed, so it belongs with the constraints we designed around.)
 
 ### F5. Attribute names and values share one global space, which the docs do not say
 
@@ -147,6 +140,17 @@ These match the docs, so they are not defects. We list what we expected, what we
 - **Repro:** `npx tsx scripts/probe.ts ws`.
 - **Our workaround:** pages and the CLI set a timer from the heartbeat's own `$expiresAt` (re-armed in steps past the 24.8-day `setTimeout` limit), then confirm with one query ([`events.ts`](../packages/core/src/arkiv/events.ts)). A custodian who runs no watcher learns of a lapse only by opening the vault page.
 - **What would fix it:** a synthetic `EntityExpired` event, or `arkiv_expiringBetween(from, to)` so a watcher can catch up after downtime.
+
+### D3. The faucet needs a browser wallet and a person (a design choice; what it cost us)
+
+- **Surface:** Hub faucet (`hub.arkiv.network/faucet`) with a MetaMask wallet in Chrome, 17 October 2026.
+- **Steps:** open the faucet page; it asks to connect a wallet and then to "Sign in with Ethereum" before any form appears; after signing, it shows "Send to", the network (Tiramisu testnet), "10 testnet $GLM per claim", a "Verify you're human" check and a claim button; after claiming, the button reads "Next claim in 58m".
+- **Expected (for funding project wallets from a script):** paste an address, pass a human check, receive GLM.
+- **Actual:** the faucet first needs a connected browser wallet and Sign-In with Ethereum. After that it does offer "Use a different address", but only on the second screen; we found it after transferring by hand. One claim per wallet per hour, 10 GLM per claim.
+- **What we did:** one claim to a MetaMask wallet, one transfer to a project treasury, and every other wallet derived from one mnemonic ([`scripts/env.ts`](../scripts/env.ts), [`scripts/fund.ts`](../scripts/fund.ts)). Those 10 GLM covered the whole build: every probe, four end-to-end runs, demo seeding and the gas tap judges use.
+- **What would fix it:** show "Use a different address" on the first screen, and put the 10 GLM per hour per wallet numbers on the Tiramisu page.
+
+---
 
 ## Measured costs (Tiramisu, 17 October 2026)
 
