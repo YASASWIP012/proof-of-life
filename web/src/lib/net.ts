@@ -37,11 +37,17 @@ export function pinReadMode(m: ReadMode | null) {
 
 const looksLikeBudget = (e: unknown) => /429|budget|ANON_COST|rate|limit|Unexpected token|not valid JSON|fetch failed|timed out|took too long/i.test(String((e as Error)?.message ?? e));
 
-/** Runs a read against Arkiv, falling back to the relay once if the direct path is rate limited. */
+// A rate-limited public RPC sometimes stalls rather than refusing, so a read that has not answered by then
+// counts as rate limited and moves to the other path.
+const STALL_MS = 10_000;
+const withStall = <T>(p: Promise<T>): Promise<T> =>
+  Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error("read took too long")), STALL_MS))]);
+
+/** Runs a read against Arkiv, falling back to the relay once if the direct path is rate limited or stalls. */
 export async function read<T>(fn: (c: PublicClient) => Promise<T>): Promise<T> {
   const first = mode === "relay" ? relay : direct;
   try {
-    return await fn(first);
+    return await (pinned ? fn(first) : withStall(fn(first)));
   } catch (e) {
     if (pinned || !looksLikeBudget(e)) throw e;
     const other: ReadMode = mode === "relay" ? "direct" : "relay";
