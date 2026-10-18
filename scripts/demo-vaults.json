@@ -42,5 +42,15 @@
       242
     ],
     "checkIn": true
+  },
+  "pilot-2": {
+    "vaultId": "0xad33705f0d1b3aa36b45ae52d42b6b78f933544fe056bdfab6c19c4710d07082",
+    "creator": "0x7C4E28e08183601dB2090Eb3F805c813d89c4B25",
+    "activist": 108,
+    "custodians": [
+      null,
+      281
+    ],
+    "checkIn": true
   }
 }
