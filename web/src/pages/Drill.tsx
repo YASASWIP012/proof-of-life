@@ -15,6 +15,7 @@ import { newSecret } from "../lib/keys";
 import { read, readClient } from "../lib/net";
 import { syntheticRtiReply } from "../lib/synthetic";
 import { ensureGas } from "../lib/tap";
+import { useI18n } from "../lib/i18n";
 import { attrs, beatPayload, checkIn, hexToBytes, newBeatTokens, vaultStatus } from "@proof-of-life/core";
 import { ExpirationTime, jsonToPayload } from "@arkiv-network/sdk";
 
@@ -25,11 +26,12 @@ const INTERVAL = 60;
 const GRACE = 60;
 
 export default function Drill() {
+  const { t } = useI18n();
   const [stage, setStage] = useState<"intro" | "setup" | "live" | "done">("intro");
   const [log, setLog] = useState<Log[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [note, setNote] = useState("The real figures are in the measurement book, page 14.");
+  const [note, setNote] = useState(() => t("dr_note_default"));
   const [view, setView] = useState<VaultView | null>(null);
   const [fetchedAt, setFetchedAt] = useState(0);
   const [unreachable, setUnreachable] = useState(true);
@@ -59,17 +61,17 @@ export default function Drill() {
         const s = newSecret();
         return { ...s, name, wallet: walletClient(s.account) };
       };
-      const activist = mk("Activist");
-      const custodians = [mk("Custodian 1 · journalist"), mk("Custodian 2 · lawyer"), mk("Custodian 3 · friend")];
-      const forger = mk("Forger");
+      const activist = mk(t("dr_activist"));
+      const custodians = [mk(t("dr_c1")), mk(t("dr_c2")), mk(t("dr_c3"))];
+      const forger = mk(t("dr_forger"));
       actors.current = { activist, custodians, forger };
-      add({ text: `Made 5 fresh keys in this tab. Activist ${short(activist.account.address)}.` });
+      add({ text: t("dr_l_keys", { a: short(activist.account.address) }) });
 
       await ensureGas(activist.account.address, parseEther("0.05"));
-      add({ text: "Activist received test gas from the tap." });
+      add({ text: t("dr_l_tap") });
       for (const c of [...custodians, forger]) {
         const tx = await activist.wallet.sendTransaction({ to: c.account.address, value: parseEther("0.005"), account: activist.account, chain: activist.wallet.chain });
-        add({ text: `Gas to ${c.name}`, tx });
+        add({ text: t("dr_l_gas", { name: c.name }), tx });
       }
       await new Promise((r) => setTimeout(r, 4000));
 
@@ -86,17 +88,17 @@ export default function Drill() {
         custodianPubKeys: custodians.map((c) => hexToBytes(c.pubkey)),
         beatTokens: tokens.current,
       });
-      add({ text: `Encrypted 2 files in the browser. Key split 2-of-3. Vault ${short(sealed.vaultId)}.` });
+      add({ text: t("dr_l_enc", { v: short(sealed.vaultId) }) });
 
       const res = await createVault(activist.wallet, readClient(), {
         sealed, k: 2,
         custodians: custodians.map((c) => ({ address: c.account.address, pubkey: c.pubkey })),
         intervalS: INTERVAL, graceS: GRACE, mode: "public", vaultDays: 30, listed: true,
-      }, (p) => p.txHash && add({ text: p.stage === "chunks" ? `Ciphertext chunk ${p.done}/${p.total} written and sealed` : "Manifest, 3 envelopes and the heartbeat written in one batch", tx: p.txHash }));
+      }, (p) => p.txHash && add({ text: p.stage === "chunks" ? t("dr_l_chunk", { d: p.done, t: p.total }) : t("dr_l_batch"), tx: p.txHash }));
       vaultRef.current = { vaultId: sealed.vaultId, creator: activist.account.address, heartbeatKey: res.heartbeatKey };
 
       const acks = await Promise.all(custodians.map((c) => ackCustody(c.wallet, { vaultId: sealed.vaultId, slot: custodians.indexOf(c) + 1, listed: true })));
-      acks.forEach((a, i) => add({ text: `${custodians[i].name} confirmed custody`, tx: a.txHash }));
+      acks.forEach((a, i) => add({ text: t("dr_l_ack", { name: custodians[i].name }), tx: a.txHash }));
       await refresh();
       setStage("live");
     } catch (e) {
@@ -113,7 +115,7 @@ export default function Drill() {
     try {
       const beat = { vaultId: v.vaultId, payload: beatPayload(v.vaultId, a.custodians.map((c) => c.pubkey), tokens.current.ok), listed: true };
       const r = await checkIn(a.activist.wallet, { heartbeatKey: v.heartbeatKey, intervalS: INTERVAL, graceS: GRACE, beat });
-      add({ text: "Activist checked in", tx: r.txHash, tone: "ok" });
+      add({ text: t("dr_l_beat"), tx: r.txHash, tone: "ok" });
       await refresh();
     } catch (e) {
       setErr((e as Error).message);
@@ -128,7 +130,7 @@ export default function Drill() {
     setBusy(true);
     try {
       const r = await a.activist.wallet.deleteEntity({ entityKey: v.heartbeatKey });
-      add({ text: "Coercion: the activist is forced to delete the heartbeat. That only stops it sooner.", tx: r.txHash, tone: "bad" });
+      add({ text: t("dr_l_coerce"), tx: r.txHash, tone: "bad" });
       await refresh();
     } catch (e) {
       setErr((e as Error).message);
@@ -146,7 +148,7 @@ export default function Drill() {
       (async () => {
         const a = actors.current!;
         const v = vaultRef.current!;
-        add({ text: "Custodians' watchers: heartbeat gone. Releasing.", tone: "bad" });
+        add({ text: t("dr_l_gone"), tone: "bad" });
         if (forge) {
           try {
             // A stranger publishes a "release" for slot 2. It will be shown, and ignored.
@@ -156,16 +158,16 @@ export default function Drill() {
               attributes: attrs.release(v.vaultId, 2, v.creator),
               expires: ExpirationTime.fromDays(1),
             });
-            add({ text: "A forger published a fake piece for slot 2", tx: fake.txHash, tone: "bad" });
+            add({ text: t("dr_l_fake"), tx: fake.txHash, tone: "bad" });
           } catch {}
         }
         const who = unreachable ? [0, 2] : [0, 1, 2];
-        if (unreachable) add({ text: "Custodian 2 is unreachable. 2 of 3 is still enough." });
+        if (unreachable) add({ text: t("dr_l_unreach") });
         for (const i of who) {
           try {
             const fresh = await refresh();
             const r = await releaseMyShare(a.custodians[i].wallet, readClient(), fresh!, a.custodians[i].secret);
-            add({ text: `${a.custodians[i].name} published a piece`, tx: r.txHash, tone: "ok" });
+            add({ text: t("dr_l_piece", { name: a.custodians[i].name }), tx: r.txHash, tone: "ok" });
           } catch (e) {
             add({ text: `${a.custodians[i].name}: ${(e as Error).message}`, tone: "bad" });
           }
@@ -195,19 +197,17 @@ export default function Drill() {
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="space-y-6">
         <Card>
-          <p className="text-xs uppercase tracking-wider text-muted">Five-minute drill</p>
-          <h1 className="mt-1 font-serif text-3xl font-bold">Watch a vault live, die and speak.</h1>
-          <p className="mt-3 text-sm text-muted">
-            This tab plays one activist and three custodians. Every step is a real write to Arkiv's Tiramisu testnet, with a link to the transaction. The clock is shrunk: check in every minute, one minute of grace.
-          </p>
+          <p className="text-xs uppercase tracking-wider text-muted">{t("dr_kicker")}</p>
+          <h1 className="mt-1 font-serif text-3xl font-bold">{t("dr_title")}</h1>
+          <p className="mt-3 text-sm text-muted">{t("dr_body")}</p>
           {stage === "intro" && (
             <div className="mt-5 space-y-4">
-              <label className="block text-sm font-semibold">A line to seal with the synthetic RTI reply
+              <label className="block text-sm font-semibold">{t("dr_note_label")}
                 <input className={`${inputCls} mt-1.5`} value={note} maxLength={140} onChange={(e) => setNote(e.target.value)} />
               </label>
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={unreachable} onChange={(e) => setUnreachable(e.target.checked)} /> Custodian 2 is unreachable when it matters</label>
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={forge} onChange={(e) => setForge(e.target.checked)} /> A forger tries to publish a fake piece</label>
-              <Button onClick={start} disabled={busy}>Start the drill</Button>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={unreachable} onChange={(e) => setUnreachable(e.target.checked)} /> {t("dr_unreachable")}</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={forge} onChange={(e) => setForge(e.target.checked)} /> {t("dr_forge")}</label>
+              <Button onClick={start} disabled={busy}>{t("dr_start")}</Button>
             </div>
           )}
           {err && <div className="mt-4"><Notice tone="danger">{err}</Notice></div>}
@@ -217,25 +217,25 @@ export default function Drill() {
           <Card>
             <div className="flex items-center justify-between">
               <PhaseBadge phase={livePhase} />
-              <Link className="text-sm underline" to={vaultPath(view.vaultId, view.creator)}>Public vault page →</Link>
+              <Link className="text-sm underline" to={vaultPath(view.vaultId, view.creator)}>{t("dr_public")}</Link>
             </div>
             <div className="mt-4 flex flex-col items-center gap-6 sm:flex-row">
               <Pulse phase={livePhase} fraction={fraction} size={180} />
               <div className="space-y-3 text-sm">
                 {dueAt !== null && hb && hb.expiresAt > live && (
                   <>
-                    <p>Check-in due in <b className="font-mono">{dueAt > live ? duration(blocksToSeconds(dueAt - live)) : "now"}</b></p>
-                    <p>Stops beating in <b className="font-mono">{duration(blocksToSeconds(hb.expiresAt - live))}</b></p>
+                    <p>{t("dr_due")} <b className="font-mono">{dueAt > live ? duration(blocksToSeconds(dueAt - live)) : t("dr_now")}</b></p>
+                    <p>{t("dr_stops")} <b className="font-mono">{duration(blocksToSeconds(hb.expiresAt - live))}</b></p>
                   </>
                 )}
-                <p className="text-muted">{view.releases.filter((r) => r.valid).length} of {view.manifest.k} pieces public</p>
+                <p className="text-muted">{t("dr_pieces", { have: view.releases.filter((r) => r.valid).length, k: view.manifest.k })}</p>
                 {stage === "live" && hb && (
                   <div className="flex flex-wrap gap-2">
-                    <Button onClick={beat} disabled={busy}>Check in</Button>
-                    <Button variant="danger" onClick={coerce} disabled={busy}>Force deletion</Button>
+                    <Button onClick={beat} disabled={busy}>{t("dr_checkin")}</Button>
+                    <Button variant="danger" onClick={coerce} disabled={busy}>{t("dr_force")}</Button>
                   </div>
                 )}
-                {stage === "live" && hb && <p className="text-xs text-muted">Or stop pressing anything and let it lapse.</p>}
+                {stage === "live" && hb && <p className="text-xs text-muted">{t("dr_or")}</p>}
               </div>
             </div>
           </Card>
@@ -243,17 +243,17 @@ export default function Drill() {
 
         {stage === "done" && view && (
           <Card>
-            <h2 className="font-serif text-xl font-bold">The documents are out.</h2>
-            <p className="mt-2 text-sm text-muted">Open the public page in another browser, on another phone, or through the CLI. It rebuilds the key from the pieces on Arkiv and decrypts, with no help from this tab or from our servers.</p>
-            <Link to={vaultPath(view.vaultId, view.creator)}><Button className="mt-4">Open the public vault page</Button></Link>
+            <h2 className="font-serif text-xl font-bold">{t("dr_out_t")}</h2>
+            <p className="mt-2 text-sm text-muted">{t("dr_out")}</p>
+            <Link to={vaultPath(view.vaultId, view.creator)}><Button className="mt-4">{t("dr_open")}</Button></Link>
           </Card>
         )}
       </div>
 
       <Card className="h-fit">
-        <h2 className="font-serif text-lg font-bold">What just happened on Arkiv</h2>
+        <h2 className="font-serif text-lg font-bold">{t("dr_log_t")}</h2>
         <ol className="mt-3 space-y-2 text-sm">
-          {log.length === 0 && <li className="text-muted">Nothing yet.</li>}
+          {log.length === 0 && <li className="text-muted">{t("dr_log_none")}</li>}
           {log.map((l, i) => (
             <li key={i} className="flex justify-between gap-3">
               <span style={{ color: l.tone === "bad" ? "var(--color-lapsed)" : l.tone === "ok" ? "var(--color-alive)" : undefined }}>{l.text}</span>

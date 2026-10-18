@@ -1,6 +1,7 @@
 import { loadVault, watchVault, type VaultView } from "@proof-of-life/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Hex } from "viem";
+import { useI18n } from "../lib/i18n";
 import { read, sockets } from "../lib/net";
 
 export type LiveEvent = { at: number; text: string; tx?: Hex };
@@ -10,6 +11,7 @@ export type LiveEvent = { at: number; text: string; tx?: Hex };
  * which fires no event, is caught by a timer set from the heartbeat's own expiry and confirmed by a re-query.
  */
 export function useVault(vaultId: Hex, creator: Hex) {
+  const { t } = useI18n();
   const [view, setView] = useState<VaultView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState(0);
@@ -48,9 +50,9 @@ export function useVault(vaultId: Hex, creator: Hex) {
         sockets(),
         { heartbeatKey: hbKey, custodians: custodians ? (custodians.split(",") as Hex[]) : [], creator, lapseInBlocks: lapse },
         (s) => {
-          if (s.kind === "checkin") push({ at: Date.now(), text: `Check-in at block ${s.blockNumber}`, tx: s.txHash });
-          if (s.kind === "activity") push({ at: Date.now(), text: `Custodian activity at block ${s.blockNumber}`, tx: s.txHash });
-          if (s.kind === "deadline") push({ at: Date.now(), text: "Deadline reached; checking the heartbeat" });
+          if (s.kind === "checkin") push({ at: Date.now(), text: t("ev_checkin", { b: String(s.blockNumber) }), tx: s.txHash });
+          if (s.kind === "activity") push({ at: Date.now(), text: t("ev_activity", { b: String(s.blockNumber) }), tx: s.txHash });
+          if (s.kind === "deadline") push({ at: Date.now(), text: t("ev_deadline") });
           setTimeout(refresh, s.kind === "deadline" ? 0 : 800);
         },
       );

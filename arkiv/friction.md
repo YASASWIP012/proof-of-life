@@ -1,6 +1,6 @@
 # Friction report: building Proof of Life on Arkiv
 
-Every entry below is something we reproduced ourselves on 17 October 2026, with the command that reproduces it and the block or transaction where we saw it. Setup for all of them:
+Every entry below is something we reproduced ourselves on 17 or 18 October 2026 (each entry gives its date), with the command that reproduces it and the block or transaction where we saw it. Setup for all of them:
 
 - `@arkiv-network/sdk` **0.8.1**, `viem` **2.57.7**, Node **24.19.0**, macOS 15.5
 - Tiramisu testnet, chain `7738577`, `https://rpc.tiramisu.db-chain.testnet.arkiv.network` with an access key in the path (except where an entry says keyless)
@@ -155,7 +155,7 @@ These match the docs, so they are not defects. We list what we expected, what we
 | One 96 KiB ciphertext chunk, sealed | 3,967,360 | 0.00397 |
 | Manifest + 3 envelopes + heartbeat, sealed | 680,792 | 0.00068 |
 | Custodian acknowledgement | 105,384 | 0.00011 |
-| Check-in, heartbeat only (the demo keeper, which writes no note) | 25,180 | 0.000025 |
+| Check-in that extends the heartbeat only, with no note (the demo keeper did this until 18 October; it now writes a note like every real check-in) | 25,180 | 0.000025 |
 | Check-in with its encrypted beat note, 3 custodians (`0xb3bb2783…b135`, block 701784; a forced check-in costs the same) | 114,080 | 0.00011 |
 | Release (create + seal) | 127,720 | 0.00013 |
 | 32 KiB entity for 1, 30 or 365 days | ~1,340,000 | 0.00134 (F3) |

@@ -10,6 +10,10 @@ import { useI18n } from "../lib/i18n";
 import { read } from "../lib/net";
 import { sessionWallet } from "../lib/session";
 import { TIRAMISU } from "@proof-of-life/core";
+import type { Strings } from "../lib/strings.en";
+
+// The reasons core gives for ignoring an entity, mapped to translated text.
+const REJECT_KEY: Record<string, keyof Strings> = {"vault entity from a different creator": "rj_vault", "second manifest for the same vault; the first one counts": "rj_manifest", "heartbeat not written by the vault's creator": "rj_heartbeat", "check-in note not written by the vault's creator": "rj_beat", "envelope not written by the vault's creator": "rj_envelope", "acknowledgement from a wallet that is not this slot's custodian": "rj_ack", "release from a wallet that is not this slot's custodian": "rj_release"};
 
 const DARK_PHASE = { alive: "#4ADE80", overdue: "#FBBF24", lapsed: "#F87171", releasing: "#F87171", released: "#A5B4FC" } as const;
 
@@ -77,7 +81,7 @@ function VaultBody({ view, fetchedAt, events, refresh }: { view: VaultView; fetc
                     </div>
                   )}
                   <p className="text-[12.5px]" style={{ color: "var(--app-ink-2)" }}>
-                    Every {duration(m.interval_s)} · grace {duration(m.grace_s)} · {m.k} of {m.n} custodians · {m.release.mode === "newsroom" ? "release to a newsroom" : "public release"}
+                    {t("vp_rhythm", { i: duration(m.interval_s), g: duration(m.grace_s), k: m.k, n: m.n, mode: t(m.release.mode === "newsroom" ? "vp_mode_newsroom" : "vp_mode_public") })}
                   </p>
                 </div>
               </div>
@@ -125,7 +129,7 @@ function VaultBody({ view, fetchedAt, events, refresh }: { view: VaultView; fetc
             <p className="mt-1 text-sm text-muted">{t("v_rejected_d")}</p>
             <ul className="mt-3 space-y-1 text-xs">
               {view.rejected.map((r) => (
-                <li key={r.key} className="font-mono"><span className="text-lapsed">✕</span> {r.kind} {short(r.key)}: {r.reason}</li>
+                <li key={r.key} className="font-mono"><span className="text-lapsed">✕</span> {r.kind} {short(r.key)}: {REJECT_KEY[r.reason] ? t(REJECT_KEY[r.reason]) : r.reason}</li>
               ))}
             </ul>
           </Card>
@@ -134,13 +138,13 @@ function VaultBody({ view, fetchedAt, events, refresh }: { view: VaultView; fetc
 
       <div className="space-y-6">
         <Card>
-          <h2 className="font-serif text-lg font-bold">On Arkiv</h2>
+          <h2 className="font-serif text-lg font-bold">{t("vp_on_arkiv")}</h2>
           <ul className="mt-3 space-y-2 text-sm">
             <li style={{ color: view.sealed ? "var(--color-alive)" : "var(--color-overdue)" }}>{view.sealed ? "✓" : "!"} {t(view.sealed ? "v_sealed_yes" : "v_sealed_no")}</li>
-            <li>✓ {m.chunks.count} encrypted chunk(s), {fmtBytes(m.chunks.bytes)}, sealed by <span className="font-mono text-xs">{short(view.creator)}</span></li>
-            <li>✓ {view.envelopes.filter((e) => e.sealed).length} of {m.n} key envelopes sealed</li>
-            <li>✓ Vault data kept until block {view.expiresAt.toString()} (~{duration(blocksToSeconds(view.expiresAt - live))})</li>
-            <li className="text-muted">Sealed at block {view.createdAt.toString()} · {new Date(m.sealed_at_ms).toLocaleString()}</li>
+            <li>✓ {t("vp_chunks", { n: m.chunks.count, size: fmtBytes(m.chunks.bytes) })} <span className="font-mono text-xs">{short(view.creator)}</span></li>
+            <li>✓ {t("vp_envelopes", { have: view.envelopes.filter((e) => e.sealed).length, n: m.n })}</li>
+            <li>✓ {t("vp_kept", { b: view.expiresAt.toString(), d: duration(blocksToSeconds(view.expiresAt - live)) })}</li>
+            <li className="text-muted">{t("vp_sealed_at", { b: view.createdAt.toString(), date: new Date(m.sealed_at_ms).toLocaleString() })}</li>
           </ul>
           <KeepAlive view={view} onDone={refresh} />
         </Card>
@@ -151,7 +155,7 @@ function VaultBody({ view, fetchedAt, events, refresh }: { view: VaultView; fetc
             <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: "var(--color-alive)" }}><span className="beat h-2 w-2 rounded-full" style={{ background: "var(--color-alive)" }} />{t("v_live")} · WebSocket</span>
           </div>
           <ul className="mt-3 space-y-2 text-sm">
-            {events.length === 0 && <li className="text-muted">Waiting for check-ins, acknowledgements and releases…</li>}
+            {events.length === 0 && <li className="text-muted">{t("vp_waiting")}</li>}
             {events.map((e, i) => (
               <li key={i} className="flex justify-between gap-2"><span>{e.text}</span>{e.tx && <TxLink hash={e.tx} />}</li>
             ))}
@@ -178,7 +182,7 @@ function Documents({ view }: { view: VaultView }) {
       const { ciphertext } = await read((c) => loadCiphertext(c, view));
       const out = unsealVault(view.vaultId, ciphertext, shares);
       setFiles(out.files);
-      setMsg(out.verified ? t("v_verified", { block: view.createdAt.toString(), date: new Date(out.bundle.sealedAtMs).toLocaleString() }) : "Some files do not match their sealed hash.");
+      setMsg(out.verified ? t("v_verified", { block: view.createdAt.toString(), date: new Date(out.bundle.sealedAtMs).toLocaleString() }) : t("vp_mismatch"));
       setState("done");
     } catch (e) {
       setMsg((e as Error).message);
@@ -199,13 +203,14 @@ function Documents({ view }: { view: VaultView }) {
 }
 
 function FilePreview({ f }: { f: VaultFile }) {
+  const { t } = useI18n();
   const url = useMemo(() => URL.createObjectURL(new Blob([new Uint8Array(f.bytes)], { type: f.type })), [f]);
   const isText = f.type.startsWith("text/");
   return (
     <li className="rounded-xl border border-line p-3">
       <div className="flex items-center justify-between gap-2 text-sm">
         <span className="font-semibold">{f.name}</span>
-        <a className="underline" href={url} download={f.name}>Download · {fmtBytes(f.bytes.length)}</a>
+        <a className="underline" href={url} download={f.name}>{t("vp_download")} · {fmtBytes(f.bytes.length)}</a>
       </div>
       {isText && <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-paper p-3 text-xs">{new TextDecoder().decode(f.bytes)}</pre>}
       {f.type.startsWith("image/") && <img className="mt-2 max-h-96 rounded-lg" src={url} alt={f.name} />}
@@ -218,15 +223,15 @@ function KeepAlive({ view, onDone }: { view: VaultView; onDone: () => void }) {
   const { t } = useI18n();
   const [state, setState] = useState<string>("");
   const go = async () => {
-    setState("Getting test gas…");
+    setState(t("ka_gas"));
     try {
       const w = await sessionWallet();
       const yearOut = view.head + 365n * 43_200n;
       const keys = (await read((c) => extendableKeys(c, view, "anyone"))).filter((k) => k.expiresAt < yearOut).map((k) => k.key);
-      if (keys.length === 0) return setState("Everything is already kept for at least a year.");
-      setState(`Extending ${keys.length} sealed entities…`);
+      if (keys.length === 0) return setState(t("ka_none"));
+      setState(t("ka_extending", { n: keys.length }));
       const r = await keepAlive(w, keys, 366);
-      setState(`Done · ${r.txHash}`);
+      setState(`${t("ka_done")} · ${r.txHash}`);
       onDone();
     } catch (e) {
       setState((e as Error).message);
@@ -243,26 +248,27 @@ function KeepAlive({ view, onDone }: { view: VaultView; onDone: () => void }) {
 
 /** Reads the vault as it stood at a past block, so anyone can show the heartbeat was alive (or gone) at that moment. */
 function AsOf({ view }: { view: VaultView }) {
+  const { t } = useI18n();
   const [block, setBlock] = useState(String(view.head - 43_200n > view.createdAt ? view.head - 43_200n : view.createdAt));
   const [out, setOut] = useState<string>("");
   const go = async () => {
-    setOut("Reading…");
+    setOut(t("as_reading"));
     try {
       const at = BigInt(block);
       const past = await read((c) => loadVault(c, view.vaultId, view.creator, { atBlock: at }));
       const hb = past.heartbeat;
-      setOut(`At block ${at}: ${past.status.phase}${hb ? `, heartbeat valid until block ${hb.expiresAt}` : ", no heartbeat"}, ${past.releases.filter((r) => r.valid).length} valid piece(s).`);
+      setOut(t("as_at", { b: at.toString(), phase: t(`phase_${past.status.phase}`) }) + (hb ? t("as_hb", { b: hb.expiresAt.toString() }) : t("as_nohb")) + t("as_pieces", { n: past.releases.filter((r) => r.valid).length }));
     } catch (e) {
       setOut((e as Error).message.split("\n")[0]);
     }
   };
   return (
     <Card>
-      <h2 className="font-serif text-lg font-bold">As of an earlier block</h2>
-      <p className="mt-1 text-sm text-muted">The same query, read at a past block with Arkiv's atBlock. It proves what state the vault was in at that moment, for example that the activist was still checking in.</p>
+      <h2 className="font-serif text-lg font-bold">{t("as_t")}</h2>
+      <p className="mt-1 text-sm text-muted">{t("as_d")}</p>
       <div className="mt-3 flex gap-2">
         <input className={`${inputCls} font-mono`} value={block} onChange={(e) => setBlock(e.target.value.replace(/[^0-9]/g, ""))} />
-        <Button variant="ghost" onClick={go}>Read</Button>
+        <Button variant="ghost" onClick={go}>{t("as_read")}</Button>
       </div>
       {out && <p className="mt-2 text-sm">{out}</p>}
     </Card>
@@ -270,14 +276,15 @@ function AsOf({ view }: { view: VaultView }) {
 }
 
 function VerifyPanel({ view }: { view: VaultView }) {
+  const { t } = useI18n();
   const q = verificationQueries(view.vaultId, view.creator);
   // A heredoc keeps the query's own single quotes intact, so this pastes straight into a shell.
   const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "arkiv_query", params: [q.heartbeat, { select: { key: true, expiresAt: true, owner: true, creator: true } }] });
   const curl = `curl -s ${TIRAMISU.rpc} -H 'content-type: application/json' --data-binary @- <<'EOF'\n${body}\nEOF`;
   return (
     <Card>
-      <h2 className="font-serif text-lg font-bold">Check this without us</h2>
-      <p className="mt-1 text-sm text-muted">Every fact on this page comes from these Arkiv queries. Run them against any Arkiv endpoint.</p>
+      <h2 className="font-serif text-lg font-bold">{t("vy_t")}</h2>
+      <p className="mt-1 text-sm text-muted">{t("vy_d")}</p>
       {Object.entries(q).map(([name, s]) => (
         <div key={name} className="mt-3">
           <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted">{name}<Copy text={s} /></div>

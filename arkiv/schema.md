@@ -110,7 +110,7 @@ Arkiv has no server-side ordering, so chunks are ordered by their `idx` attribut
 
 **Pagination.** Every multi-page read goes through one helper (`fetchAll` in [`reads.ts`](../packages/core/src/arkiv/reads.ts)). A single page costs one query. When there are more, the walk restarts with `.atBlock()` set to the first page's block, so no row moves between pages and a new block cannot invalidate the cursor halfway.
 
-**What the typed numbers on a listed vault are for.** `interval_s` and the heartbeat's `$expiresAt` are ranged over by the two directory filters above. `k`, `n` and `mode` are read straight from attributes to draw the directory and the CLI's `vaults` list without decoding any payload. `chunks` and `sealed_at_ms` let a third party size or date a vault from attributes alone, for example `chunks >= i32(2)`. We do not run that last query ourselves.
+**What the typed numbers on a listed vault are for.** `interval_s` and the heartbeat's `$expiresAt` are ranged over by the two directory filters above. `k`, `n` and `mode` are read straight from attributes to draw the directory and the CLI's `vaults` list without decoding any payload. `chunks` and `sealed_at_ms` are for other readers: a third party can size or date a listed vault from attributes alone, for example `chunks >= i32(2)`, without decoding a manifest. Our own screens read the same two numbers from the manifest, so we do not run that query.
 
 ## Live updates
 

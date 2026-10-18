@@ -204,6 +204,7 @@ function Feature({ eyebrow, icon, title, body, chips, flip = false, children }: 
 /* ---------- Hero: the real always-alive vault, read live from Arkiv ---------- */
 
 function HeroVisual() {
+  const { t } = useI18n();
   const { view, fetchedAt } = useVault(LIVE.vaultId, LIVE.creator);
   const { head } = useHead(view?.head, fetchedAt);
   const live = head ?? 0n;
@@ -222,21 +223,21 @@ function HeroVisual() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex h-7 items-center gap-2 rounded-full px-3 text-[12.5px] font-semibold" style={{ background: "rgba(255,255,255,.06)", color: PHASE_COLOR[phase] === "var(--alive)" ? "#4ADE80" : "#FBBF24" }}>
-                <span className="beat h-2 w-2 rounded-full" style={{ background: "currentColor" }} /> {phase === "alive" ? "Alive" : phase}
+                <span className="beat h-2 w-2 rounded-full" style={{ background: "currentColor" }} /> {t(`phase_${phase}`)}
               </span>
-              <span className="text-[12.5px]" style={{ color: "var(--app-ink-2)" }}>read from Arkiv {view ? `at block ${view.head}` : "…"}</span>
+              <span className="text-[12.5px]" style={{ color: "var(--app-ink-2)" }}>{t("hm_read")} {view ? t("hm_at", { b: view.head.toString() }) : "…"}</span>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Stat label="Check-in due in" value={dueAt && dueAt > live ? duration(blocksToSeconds(dueAt - live)) : "…"} />
-              <Stat label="Stops beating in" value={hb ? duration(blocksToSeconds(hb.expiresAt - live)) : "…"} />
+              <Stat label={t("mk_next")} value={dueAt && dueAt > live ? duration(blocksToSeconds(dueAt - live)) : "…"} />
+              <Stat label={t("dr_stops").replace(/:$/, "")} value={hb ? duration(blocksToSeconds(hb.expiresAt - live)) : "…"} />
             </div>
             <div className="space-y-1.5">
               {(m?.custodians ?? [1, 2, 3].map((slot) => ({ slot, address: "0x…" }))).map((c) => {
                 const ack = view?.acks.find((a) => a.slot === c.slot);
                 return (
                   <div key={c.slot} className="flex items-center justify-between rounded-[10px] px-3 py-2 text-[12.5px]" style={{ background: "var(--app-card)", color: "var(--app-ink)" }}>
-                    <span>Custodian {c.slot} <span className="t-mono" style={{ color: "var(--app-ink-2)" }}>{short(c.address, 4)}</span></span>
-                    <span style={{ color: ack ? "#4ADE80" : "var(--app-ink-2)" }}>{ack ? "holding the key" : "…"}</span>
+                    <span>{t("hm_custodian", { n: c.slot })} <span className="t-mono" style={{ color: "var(--app-ink-2)" }}>{short(c.address, 4)}</span></span>
+                    <span style={{ color: ack ? "#4ADE80" : "var(--app-ink-2)" }}>{ack ? t("hm_holding") : "…"}</span>
                   </div>
                 );
               })}
@@ -245,13 +246,13 @@ function HeroVisual() {
         </div>
       </div>
       <div className="float left-[-64px] top-[8%]" aria-hidden="true">
-        <div className="flex items-center gap-2.5"><Dot c="var(--alive)" /><div><b>Check-in received</b><br /><span className="text-muted">heartbeat moved forward</span></div></div>
+        <div className="flex items-center gap-2.5"><Dot c="var(--alive)" /><div><b>{t("hm_f1_t")}</b><br /><span className="text-muted">{t("hm_f1")}</span></div></div>
       </div>
       <div className="float bottom-[18%] right-[-40px]" aria-hidden="true">
-        <div className="flex items-center gap-2.5"><Dot c="var(--sealed)" /><div><b>3 envelopes sealed</b><br /><span className="text-muted">owner 0x…dEaD · nobody can delete</span></div></div>
+        <div className="flex items-center gap-2.5"><Dot c="var(--sealed)" /><div><b>{t("hm_f2_t")}</b><br /><span className="text-muted">{t("hm_f2")}</span></div></div>
       </div>
       <div className="float bottom-[-22px] left-[14%]" aria-hidden="true">
-        <div className="flex items-center gap-2.5"><Dot c="var(--accent)" /><div><b>Custodian 2 renewed custody</b><br /><span className="text-muted">lease extended 14 days</span></div></div>
+        <div className="flex items-center gap-2.5"><Dot c="var(--accent)" /><div><b>{t("hm_f3_t")}</b><br /><span className="text-muted">{t("hm_f3")}</span></div></div>
       </div>
     </div>
   );
@@ -271,19 +272,20 @@ function Stat({ label, value }: { label: string; value: string }) {
 /* ---------- Feature visuals (decorative mockups of real screens) ---------- */
 
 function SealVisual() {
+  const { t } = useI18n();
   const rows = [["rti-reply-rural-works.pdf", "412 KB"], ["field-survey.csv", "2 KB"], ["note-to-reader.txt", "1 KB"]];
   return (
     <div className="window" aria-hidden="true">
-      <div className="window__bar"><span className="lights"><i /><i /><i /></span><span className="window__title">Seal a vault</span></div>
+      <div className="window__bar"><span className="lights"><i /><i /><i /></span><span className="window__title">{t("nav_new")}</span></div>
       <div className="space-y-2 p-5 text-[13px]">
         {rows.map(([n, s]) => (
           <div key={n} className="flex items-center justify-between rounded-[10px] bg-paper-alt px-3 py-2.5"><span className="font-medium">{n}</span><span className="text-muted">{s}</span></div>
         ))}
-        <div className="flex items-center gap-2 py-1 text-[12px] text-muted"><span className="h-px flex-1 bg-[var(--line-2)]" />encrypted in this browser<span className="h-px flex-1 bg-[var(--line-2)]" /></div>
+        <div className="flex items-center gap-2 py-1 text-[12px] text-muted"><span className="h-px flex-1 bg-[var(--line-2)]" />{t("mk_enc")}<span className="h-px flex-1 bg-[var(--line-2)]" /></div>
         {["9f3c…a1d0", "51be…7c42", "e07a…3b19", "c2d4…08fe", "7a11…94c3"].map((h, i) => (
           <div key={h} className="flex items-center justify-between rounded-[10px] px-3 py-2 shadow-[var(--ring)]">
-            <span className="t-mono text-[12px]">chunk {i} · {h}</span>
-            <span className="text-[12px] font-semibold" style={{ color: "var(--sealed)" }}>sealed</span>
+            <span className="t-mono text-[12px]">{t("mk_chunk", { i })} · {h}</span>
+            <span className="text-[12px] font-semibold" style={{ color: "var(--sealed)" }}>{t("mk_sealed")}</span>
           </div>
         ))}
       </div>
@@ -292,37 +294,39 @@ function SealVisual() {
 }
 
 function CustodianVisual() {
-  const people = [["Journalist", "slot 1", "var(--accent)"], ["Lawyer", "slot 2", "var(--sealed)"], ["Friend", "slot 3", "var(--alive)"]];
+  const { t } = useI18n();
+  const people = [[t("mk_journalist"), t("mk_slot", { n: 1 }), "var(--accent)"], [t("mk_lawyer"), t("mk_slot", { n: 2 }), "var(--sealed)"], [t("mk_friend"), t("mk_slot", { n: 3 }), "var(--alive)"]];
   return (
     <div className="card card--raised !p-6" aria-hidden="true">
-      <p className="eyebrow">2 of 3 open the vault</p>
+      <p className="eyebrow">{t("mk_2of3")}</p>
       <div className="mt-4 space-y-3">
         {people.map(([who, slot, c]) => (
           <div key={who} className="flex items-center gap-3">
             <span className="avatar" style={{ background: `color-mix(in oklab, ${c} 16%, white)`, color: c }}>{who[0]}</span>
             <div className="flex-1">
               <p className="text-[14px] font-semibold">{who} <span className="font-normal text-muted">· {slot}</span></p>
-              <p className="text-[12.5px] text-muted">one piece of the key, encrypted to a one-time address</p>
+              <p className="text-[12.5px] text-muted">{t("mk_piece")}</p>
             </div>
             <svg viewBox="0 0 40 16" width="48" height="20"><path d="M4 8h22M26 8l-4-4M26 8l-4 4" stroke={c} strokeWidth="2" fill="none" strokeLinecap="round" /><circle cx="33" cy="8" r="4" fill={c} /></svg>
           </div>
         ))}
       </div>
-      <div className="mt-5 rounded-[12px] bg-paper-alt px-4 py-3 text-[13px] text-ink-2">Any two pieces rebuild the key. One alone is random noise.</div>
+      <div className="mt-5 rounded-[12px] bg-paper-alt px-4 py-3 text-[13px] text-ink-2">{t("mk_any2")}</div>
     </div>
   );
 }
 
 function PhoneVisual() {
+  const { t } = useI18n();
   return (
     <div className="phone" aria-hidden="true">
       <div className="phone__screen">
         <div className="phone__status"><span>9:41</span><span>5G</span></div>
         <div className="phone__body flex h-[calc(100%-48px)] flex-col items-center justify-center gap-4 text-center">
           <Pulse phase="alive" fraction={0.86} size={150} />
-          <p className="text-[13px] text-muted">Next check-in due in</p>
+          <p className="text-[13px] text-muted">{t("mk_next")}</p>
           <p className="t-mono -mt-3 text-[26px] font-medium">6d 04h</p>
-          <span className="btn btn-ink w-full">I'm safe · check in</span>
+          <span className="btn btn-ink w-full">{t("mk_safe")}</span>
           <p className="text-[12px] text-muted">मैं सुरक्षित हूँ · నేను క్షేమంగా ఉన్నాను</p>
         </div>
       </div>
@@ -331,17 +335,18 @@ function PhoneVisual() {
 }
 
 function ReleaseVisual() {
+  const { t } = useI18n();
   return (
     <div className="window" aria-hidden="true">
-      <div className="window__bar"><span className="lights"><i /><i /><i /></span><span className="window__title">Released</span></div>
+      <div className="window__bar"><span className="lights"><i /><i /><i /></span><span className="window__title">{t("phase_released")}</span></div>
       <div className="space-y-3 p-5 text-[13px]">
-        <div className="flex items-center gap-2 font-semibold" style={{ color: "var(--lapsed)" }}><span className="h-2 w-2 rounded-full bg-[var(--lapsed)]" />Heartbeat stopped at block 693,104</div>
-        {[["Custodian 1", "piece published", "var(--sealed)"], ["Custodian 3", "piece published", "var(--sealed)"], ["0x9a4…f2e (stranger)", "ignored: wrong creator", "var(--ink-4)"]].map(([w, s, c]) => (
+        <div className="flex items-center gap-2 font-semibold" style={{ color: "var(--lapsed)" }}><span className="h-2 w-2 rounded-full bg-[var(--lapsed)]" />{t("mk_stopped", { b: "693,104" })}</div>
+        {[[t("hm_custodian", { n: 1 }), t("mk_published"), "var(--sealed)"], [t("hm_custodian", { n: 3 }), t("mk_published"), "var(--sealed)"], [t("mk_stranger", { a: "0x9a4…f2e" }), t("mk_ignored"), "var(--ink-4)"]].map(([w, s, c]) => (
           <div key={w} className="flex justify-between rounded-[10px] px-3 py-2 shadow-[var(--ring)]"><span>{w}</span><span style={{ color: c }}>{s}</span></div>
         ))}
         <div className="rounded-[12px] bg-paper-alt p-4">
           <p className="font-semibold">rti-reply-rural-works.pdf</p>
-          <p className="mt-1 text-muted">matches the hash sealed at block 692,595</p>
+          <p className="mt-1 text-muted">{t("mk_matches", { b: "692,595" })}</p>
         </div>
       </div>
     </div>
@@ -392,7 +397,7 @@ function Simulator() {
         <div>
           <p className="t-title">{t("sim_rhythm")}</p>
           <div className="segmented mt-3" role="tablist">
-            {RHYTHMS.map((r) => <button key={r.id} aria-selected={rhythm.id === r.id} onClick={() => setRhythm(r)}>{r.label}</button>)}
+            {RHYTHMS.map((r) => <button key={r.id} aria-selected={rhythm.id === r.id} onClick={() => setRhythm(r)}>{t(`rh_${r.id}`)}</button>)}
           </div>
         </div>
         <div>
