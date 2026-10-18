@@ -100,6 +100,14 @@ export default function Home() {
               </ul>
             </div>
           </div>
+          <div className="card mt-6 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-[640px]">
+              <Eyebrow dot>{t("home_rti_eyebrow")}</Eyebrow>
+              <h3 className="t-title mt-3">{t("home_rti_h2")}</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{t("home_rti_lead")}</p>
+            </div>
+            <Link to="/rti" className="btn btn-ink btn-lg flex-none">{t("home_rti_cta")}</Link>
+          </div>
         </div>
       </section>
 

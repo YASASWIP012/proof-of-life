@@ -30,6 +30,7 @@ Every entity of a **listed** vault carries these four attributes (an unlisted va
 | `beat` | activist | none | the check-in's 16-byte token encrypted to each custodian, fixed size (`n` × 77 bytes) | readonly | activist | `interval_s + grace_s`, one per check-in |
 | `ack` | custodian | `slot` `i32` | empty | readonly | custodian | 14 days, reset by the custodian's watcher |
 | `release` | custodian | `project` `str` and plain `type = str('release')` on every release, listed vault or not; `slot` `i32`; `vault_creator` `addr` (the vault's creator, so released evidence is findable from the chain alone) | JSON: the share (or the share encrypted to a newsroom) | readonly, permissionlessExtension | `0x…dEaD` | vault term; anyone can extend |
+| `rti` (RTI clock record, belongs to no vault) | a one-time key funded by the gas tap | none. Its only attribute is `type` = `x` + the first 12 bytes of `sha256("proof-of-life/rti/v1" ‖ sha256(application))` as hex; no `project`, `v` or `vault_id` | JSON `{ v: 1, sha256, due_block }`: the application's SHA-256 (the file's bytes, or pasted text trimmed with `\n` line endings) and the block the reply is due. Nothing else about the filer or the application | readonly, **not** permissionless | the record's own seal address, the last 20 bytes of `sha256("proof-of-life/rti-seal/v1" ‖ sha256(application))`, set in the same batch. Nobody holds its key | expires exactly at `due_block` (`ExpirationTime.atBlock`): the statutory reply deadline, RTI Act s.7(1), plus s.5(2) and s.7(3)(a) when they apply. Nobody can extend it |
 
 ### Why each lifetime is what it is
 
@@ -106,6 +107,7 @@ Readers (web app, CLI, any third party) apply these rules. Anything that fails i
 The two range filters cover **listed** vaults only, on purpose. An unlisted vault carries no number to range over, which is exactly what keeps it out of every such query. A custodian or activist who holds an unlisted vault's id reads its deadline straight from the heartbeat's `$expiresAt` in the one-query vault load.
 | One activist key's own vaults, listed or not (check-in page) | `$creator = addr(key)`, kinds recognised by `kindOf` | `listVaults` |
 | Envelopes addressed to one custodian key | `custodian = addr(A)`, kinds recognised by `kindOf` | `envelopesFor` |
+| An RTI clock record, found from the application alone | `type = str(rtiTag(sha256))`; once expired, the same query with `.atBlock(b)` at its creation block (the app's link carries `b`). Readers keep the earliest row that is readonly, owned by the record's seal address, names the same hash and expires at its `due_block` | `loadRti` in [`reads.ts`](../packages/core/src/arkiv/reads.ts), rules in [`rti.ts`](../packages/core/src/arkiv/rti.ts) |
 | Is this heartbeat alive? | `… AND type = str('heartbeat') AND $creator = addr(C)` and compare `$expiresAt` with the head | vault page "Check this without us" panel |
 
 Arkiv has no server-side ordering, so chunks are ordered by their `idx` attribute and releases by `$createdAt` on the client.
@@ -131,6 +133,7 @@ Pages and the CLI watcher subscribe with `watchEntityEvents` over a **WebSocket*
 | Confirm custody | create `ack`, or extend the existing one by 14 days |
 | Release | create `release` and hand it to `0x…dEaD` in the same batch |
 | Keep alive | extend sealed entities (anyone) |
+| Record an RTI filing | create `rti` with an absolute expiry at the reply deadline and hand it to its seal address in the same batch (`recordRti`) |
 
 ## What different people can see
 

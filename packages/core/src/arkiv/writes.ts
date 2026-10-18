@@ -4,7 +4,8 @@ import type { Hex } from "viem";
 import { bytesToHex } from "../crypto/bytes.js";
 import type { SealedVault } from "../crypto/vault.js";
 import type { PublicClient, WalletClient } from "./client.js";
-import { attrs, evenSeconds, LIFETIME, Manifest, SEAL_ADDRESS, sealOwner, type ReleaseMode, type ReleasePayload } from "./schema.js";
+import { attrs, BLOCK_SECONDS, evenSeconds, LIFETIME, Manifest, SEAL_ADDRESS, sealOwner, type ReleaseMode, type ReleasePayload } from "./schema.js";
+import { rtiAttrs, rtiSealOwner, type RtiPayload } from "./rti.js";
 
 const SEALED = { readonly: true, permissionlessExtension: true } as const;
 const BIN = "application/octet-stream";
@@ -187,6 +188,26 @@ export async function publishRelease(wallet: WalletClient, reader: PublicClient,
  */
 export async function keepAlive(wallet: WalletClient, keys: Hex[], days: number = LIFETIME.defaultVaultDays) {
   return wallet.executeBatch({ extensions: keys.map((entityKey) => ({ entityKey, expires: ExpirationTime.fromDays(days) })) });
+}
+
+/**
+ * Timestamps an RTI application: one read-only entity whose payload is the application's sha256 and the block
+ * its reply is due. It expires exactly at that block and is handed to the record's own seal address in the same
+ * transaction, so nobody can change, extend or delete it. Its $creator and creation block are the proof.
+ */
+export async function recordRti(wallet: WalletClient, reader: PublicClient, p: { docHash: Hex; dueMs: number; nowMs?: number }) {
+  const head = await reader.getBlockNumber();
+  const dueBlock = head + BigInt(Math.ceil((p.dueMs - (p.nowMs ?? Date.now())) / 1000 / BLOCK_SECONDS));
+  if (dueBlock <= head + 30n) throw new Error("the reply deadline has passed, so there is nothing left to time");
+  const payload: RtiPayload = { v: 1, sha256: p.docHash.toLowerCase(), due_block: dueBlock.toString() };
+  const r = await sealedBatch(
+    wallet,
+    reader,
+    [{ payload: jsonToPayload(payload), contentType: JSON_T, attributes: rtiAttrs(p.docHash), expires: ExpirationTime.atBlock(dueBlock), flags: { readonly: true, permissionlessExtension: false } }],
+    new Set(),
+    rtiSealOwner(p.docHash),
+  );
+  return { key: r.createdEntities[0], txHash: r.txHash, dueBlock };
 }
 
 export const shareHex = (share: Uint8Array): Hex => bytesToHex(share);

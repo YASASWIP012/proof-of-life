@@ -152,17 +152,17 @@ h3,.t-h3{margin:0;font-family:var(--font-display);font-size:var(--fs-h3);font-we
 
 /* ---------- Nav (floating glass pill) ---------- */
 .nav{position:fixed;inset:12px 0 auto;z-index:50;display:flex;justify-content:center;padding-inline:12px;pointer-events:none}
-.nav__bar{pointer-events:auto;width:min(100%,980px);height:56px;display:flex;align-items:center;gap:8px;padding:0 8px 0 14px;border-radius:var(--r-pill);background:color-mix(in oklab,var(--surface) 74%,transparent);-webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6);box-shadow:0 0 0 1px var(--line),0 10px 30px -14px rgba(var(--shadow-rgb)/.22)}
+.nav__bar{pointer-events:auto;width:min(100%,1080px);height:56px;display:flex;align-items:center;gap:8px;padding:0 8px 0 14px;border-radius:var(--r-pill);background:color-mix(in oklab,var(--surface) 74%,transparent);-webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6);box-shadow:0 0 0 1px var(--line),0 10px 30px -14px rgba(var(--shadow-rgb)/.22)}
 .nav__brand{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:650;letter-spacing:-.02em}
 .nav__links{display:flex;gap:2px;margin-inline:auto}
-.nav__links a{padding:8px 12px;border-radius:var(--r-pill);font-size:14px;font-weight:500;color:var(--ink-2);transition:background-color var(--dur-hover),color var(--dur-hover)}
+.nav__links a{white-space:nowrap;padding:8px 12px;border-radius:var(--r-pill);font-size:14px;font-weight:500;color:var(--ink-2);transition:background-color var(--dur-hover),color var(--dur-hover)}
 .nav__links a:hover{background:var(--tint);color:var(--ink)}
 .nav--on-color .nav__bar{background:rgba(255,255,255,.12);box-shadow:inset 0 0 0 1px rgba(255,255,255,.22);color:#fff}
 .nav--on-color .nav__links a{color:rgba(255,255,255,.85)}
 .nav--on-color .nav__links a:hover{background:rgba(255,255,255,.12);color:#fff}
 .nav--on-color .btn-ink{background:#fff;color:#0E1116}
 .app-icon{width:28px;height:28px;border-radius:22.5%;flex:none;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12)}
-@media (max-width:760px){.nav__links{display:none}.nav__bar{justify-content:space-between}}
+@media (max-width:1100px){.nav__links{display:none}.nav__bar{justify-content:space-between}}
 
 /* ---------- Badge / chips / segmented / controls ---------- */
 .badge{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px 0 4px;border-radius:var(--r-pill);background:var(--surface);box-shadow:var(--shadow-1);font-size:13px;font-weight:550;color:var(--ink-2)}
@@ -346,3 +346,4 @@ textarea.field{height:auto;padding:10px 14px}
 .ticker{font-variant-numeric:tabular-nums}
 
 }
+@media print{body.print-letter *{visibility:hidden}body.print-letter #rti-letter,body.print-letter #rti-letter *{visibility:visible}body.print-letter #rti-letter{position:absolute;left:0;top:0;width:100%;margin:0;padding:0;background:#fff;color:#000;font-size:12pt}}

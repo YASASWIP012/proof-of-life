@@ -6,6 +6,7 @@ import Custodian from "./pages/Custodian";
 import Drill from "./pages/Drill";
 import Home from "./pages/Home";
 import NewVault from "./pages/NewVault";
+import Rti from "./pages/Rti";
 import VaultPage from "./pages/VaultPage";
 import Vaults from "./pages/Vaults";
 import Verify from "./pages/Verify";
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="/custodian" element={<Custodian />} />
             <Route path="/vaults" element={<Vaults />} />
             <Route path="/verify" element={<Verify />} />
+            <Route path="/rti" element={<Rti />} />
             <Route path="/v/:vaultId/:creator" element={<VaultPage />} />
           </Routes>
         </Layout>

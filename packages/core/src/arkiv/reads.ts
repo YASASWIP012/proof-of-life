@@ -11,6 +11,7 @@ import { sha256Hex } from "../crypto/vault.js";
 import { or } from "@arkiv-network/sdk/query";
 import { BLOCK_SECONDS } from "./schema.js";
 import { vaultStatus, type Status } from "./status.js";
+import { assembleRti, rtiTag, type RtiRecord, type RtiRow } from "./rti.js";
 
 const FIELDS = { key: true, owner: true, creator: true, createdAt: true, expiresAt: true, creationFlags: true, attributes: true, payload: true } as const;
 
@@ -342,4 +343,21 @@ export async function extendableKeys(client: PublicClient, view: VaultView, who:
   return [...view.sealedKeys, ...chunks]
     .filter((e) => e.permissionless || (who === "activist" && same(e.owner, view.creator)))
     .map((e) => ({ key: e.key, expiresAt: e.expiresAt }));
+}
+
+export type RtiView = { record: RtiRecord | null; rejected: { key: Hex; reason: string }[]; head: bigint; expired: boolean; createdMs: number | null; dueMs: number | null };
+
+/**
+ * Finds the timestamp record for an application's hash. While it lives, one query finds it from the hash alone.
+ * Once it has expired, pass `atBlock` (any block in its life, such as its creation block) to read it as it stood.
+ */
+export async function loadRti(client: PublicClient, docHash: Hex, opts: { atBlock?: bigint } = {}): Promise<RtiView> {
+  const head = await client.getBlockNumber();
+  const q = client.select({ key: true, owner: true, creator: true, createdAt: true, expiresAt: true, creationFlags: true, payload: true }).where(eq("type", str(rtiTag(docHash)))).limit(50);
+  const { rows } = await fetchAll<RtiRow>(q as unknown as Pageable, { atBlock: opts.atBlock !== undefined && opts.atBlock < head ? opts.atBlock : undefined });
+  const { record, rejected } = assembleRti(rows, docHash);
+  if (!record) return { record, rejected, head, expired: false, createdMs: null, dueMs: null };
+  const block = await client.getBlock({ blockNumber: record.createdAt });
+  const createdMs = Number(block.timestamp) * 1000;
+  return { record, rejected, head, expired: record.expiresAt <= head, createdMs, dueMs: createdMs + Number(record.expiresAt - record.createdAt) * BLOCK_SECONDS * 1000 };
 }

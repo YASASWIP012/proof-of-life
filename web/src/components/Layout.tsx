@@ -10,6 +10,7 @@ const NAV = [
   ["/custodian", "nav_custodian"],
   ["/vaults", "nav_vaults"],
   ["/verify", "nav_verify"],
+  ["/rti", "nav_rti"],
 ] as const;
 
 export function AppIcon({ size = 28 }: { size?: number }) {
@@ -55,14 +56,14 @@ export function Layout({ children }: { children: ReactNode }) {
               <svg aria-hidden viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-3"><path d="M2.5 4.5 6 8l3.5-3.5" /></svg>
             </div>
             <Link to="/drill" className="btn btn-ink btn-sm hidden sm:inline-flex">{t("nav_drill")}</Link>
-            <button className="btn btn-ghost btn-sm min-[761px]:hidden" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu">
+            <button className="btn btn-ghost btn-sm min-[1101px]:hidden" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
             </button>
           </div>
         </div>
       </header>
       {open && (
-        <div className="fixed inset-x-3 top-[76px] z-40 rounded-[20px] bg-card p-2 shadow-[var(--shadow-2)] min-[761px]:hidden">
+        <div className="fixed inset-x-3 top-[76px] z-40 rounded-[20px] bg-card p-2 shadow-[var(--shadow-2)] min-[1101px]:hidden">
           {[["/drill", "nav_drill"] as const, ...NAV].map(([to, k]) => (
             <NavLink key={to} to={to} className="block rounded-xl px-4 py-3 text-[15px] font-medium hover:bg-[var(--tint)]">{t(k)}</NavLink>
           ))}

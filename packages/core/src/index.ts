@@ -1,5 +1,6 @@
 export * from "./crypto/index.js";
 export * from "./arkiv/schema.js";
+export * from "./arkiv/rti.js";
 export * from "./arkiv/status.js";
 export * from "./arkiv/client.js";
 export * from "./arkiv/writes.js";
