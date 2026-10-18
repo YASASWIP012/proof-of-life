@@ -79,7 +79,7 @@ if (v.status.phase !== "released") {
   });
   const fakeBeat = await fw.createEntity({
     payload: new Uint8Array(), contentType: "application/octet-stream",
-    attributes: attrs.heartbeat(rel.vaultId, 60, 60), expires: ExpirationTime.fromDays(30),
+    attributes: attrs.heartbeat(rel.vaultId, 60, 60, true), expires: ExpirationTime.fromDays(30),
   });
   console.log(`  forged release ${fakeRelease.txHash}, forged heartbeat ${fakeBeat.txHash}`);
   for (const i of [0, 2]) {
