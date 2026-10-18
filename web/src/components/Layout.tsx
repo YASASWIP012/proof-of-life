@@ -48,9 +48,12 @@ export function Layout({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <div className="flex items-center gap-1.5">
-            <select aria-label="Language" value={lang} onChange={(e) => setLang(e.target.value as Lang)} className="h-9 rounded-full bg-[var(--tint)] px-3 text-[13.5px] font-medium text-ink-2 outline-none">
-              {Object.entries(LANG_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
+            <div className="relative">
+              <select aria-label="Language" value={lang} onChange={(e) => setLang(e.target.value as Lang)} className="h-9 cursor-pointer appearance-none rounded-full bg-[var(--tint)] pl-3.5 pr-8 text-[13.5px] font-medium leading-9 text-ink-2 outline-none">
+                {Object.entries(LANG_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+              <svg aria-hidden viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-3"><path d="M2.5 4.5 6 8l3.5-3.5" /></svg>
+            </div>
             <Link to="/drill" className="btn btn-ink btn-sm hidden sm:inline-flex">{t("nav_drill")}</Link>
             <button className="btn btn-ghost btn-sm min-[761px]:hidden" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Menu">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
