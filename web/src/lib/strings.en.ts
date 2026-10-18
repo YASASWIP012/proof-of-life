@@ -62,7 +62,7 @@ export const en = {
   v_sealed_no: "Not sealed: the creator could still delete this manifest",
   v_rejected: "Ignored entities",
   v_rejected_d: "These claim to belong to this vault but fail a trust check. Anyone can write them; nobody can make them count.",
-  v_keepalive: "Keep this vault alive for another year",
+  v_keepalive: "Keep this vault alive for at least a year from today",
   v_keepalive_d: "Anyone can extend sealed vault data. You pay a few cents of test gas; you cannot change or delete anything.",
   v_newsroom: "These pieces are sealed to the newsroom key. Only that newsroom can open the documents and decide what to publish.",
   v_live: "Live",
@@ -164,6 +164,7 @@ export const en = {
   vl_intro: "Every listed vault on Arkiv, read live. A vault shows only a random id, its custodian count and its heartbeat. Nothing here says who made it or what is inside. Release counts in this list are raw; open a vault to see which pieces pass their checks.",
   vl_row: "{k} of {n} custodians · {mode} release · by {by}",
   // Key, check-in, custodian and sealing flows
+  nv_reused: "One of these invite codes already guards another vault. Reusing it would link your vaults on Arkiv. Ask that custodian for a fresh invite code.",
   kg_no_key_activist: "That passphrase opens no activist key in this browser.",
   kg_no_key_custodian: "That passphrase opens no custodian key in this browser.",
   kg_short: "Use at least 8 characters. A short sentence is best.",

@@ -1,13 +1,13 @@
 // Sealing a real vault: files are encrypted here, split among custodians, and written to Arkiv sealed.
-import { createVault, hexToBytes, MAX_BUNDLE_BYTES, sealVault, walletClient, type Manifest } from "@proof-of-life/core";
-import { useState } from "react";
+import { createVault, envelopesFor, hexToBytes, MAX_BUNDLE_BYTES, sealVault, walletClient, type Manifest } from "@proof-of-life/core";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Hex } from "viem";
 import { KeyGate } from "../components/KeyGate";
 import { Button, Card, Copy, Field, Notice, TxLink, inputCls } from "../components/ui";
 import { duration, fmtBytes, vaultPath } from "../lib/format";
 import { parseInvite, type OpenKey } from "../lib/keys";
-import { readClient } from "../lib/net";
+import { read, readClient } from "../lib/net";
 import { ensureGas, waitForOwnFunds } from "../lib/tap";
 import { formatEther } from "viem";
 import { useI18n } from "../lib/i18n";
@@ -67,8 +67,19 @@ function Form({ account, keyInfo: key }: { account: OpenKey["account"]; keyInfo:
   });
   const custodians = parsed.filter((p): p is { address: Hex; pubkey: Hex } => !!p && !(p instanceof Error));
   const dup = new Set(custodians.map((c) => c.address.toLowerCase())).size !== custodians.length;
+  // A custodian key that already guards another vault would link the two vaults on chain. Ask for a fresh invite.
+  const [reused, setReused] = useState<string[]>([]);
+  const addrKey = custodians.map((c) => c.address).join(",");
+  useEffect(() => {
+    let live = true;
+    Promise.all(custodians.map((c) => read((r) => envelopesFor(r, c.address)).then((e) => (e.length ? c.address : null)).catch(() => null)))
+      .then((xs) => live && setReused(xs.filter((x): x is Hex => !!x)));
+    return () => {
+      live = false;
+    };
+  }, [addrKey]);
   const r = RHYTHMS.find((x) => x.id === rhythm)!;
-  const ready = files.length > 0 && total <= MAX_BUNDLE_BYTES * 0.7 && custodians.length >= 2 && !dup && k >= 2 && k <= custodians.length && agree && (mode === "public" || /^0x0[23][0-9a-fA-F]{64}$/.test(newsroom));
+  const ready = files.length > 0 && total <= MAX_BUNDLE_BYTES * 0.7 && custodians.length >= 2 && !dup && reused.length === 0 && k >= 2 && k <= custodians.length && agree && (mode === "public" || /^0x0[23][0-9a-fA-F]{64}$/.test(newsroom));
 
   const seal = async () => {
     setBusy(true);
@@ -145,6 +156,7 @@ function Form({ account, keyInfo: key }: { account: OpenKey["account"]; keyInfo:
             ))}
             {invites.length < 7 && <Button variant="ghost" onClick={() => setInvites([...invites, ""])}>{t("nv_add")}</Button>}
             {dup && <Notice tone="danger">{t("nv_dup")}</Notice>}
+            {reused.length > 0 && <Notice tone="danger">{t("nv_reused")}</Notice>}
           </div>
           <Field label={t("nv_k", { k, n: Math.max(custodians.length, 2) })} hint={t("nv_k_hint")}>
             <input type="range" min={2} max={Math.max(custodians.length, 2)} value={k} onChange={(e) => setK(Number(e.target.value))} className="w-full" />

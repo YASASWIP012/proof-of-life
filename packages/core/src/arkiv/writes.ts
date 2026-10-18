@@ -180,7 +180,11 @@ export async function publishRelease(wallet: WalletClient, reader: PublicClient,
   ]);
 }
 
-/** Anyone may keep sealed vault data alive. This is how custodians and supporters carry a vault forward. */
+/**
+ * Anyone may keep sealed vault data alive. This is how custodians and supporters carry a vault forward. Each key
+ * is set to expire `days` from now, so pass only keys that expire sooner (the vault page and `extendableKeys`
+ * callers filter on that); a key that already lives longer would make the batch revert.
+ */
 export async function keepAlive(wallet: WalletClient, keys: Hex[], days: number = LIFETIME.defaultVaultDays) {
   return wallet.executeBatch({ extensions: keys.map((entityKey) => ({ entityKey, expires: ExpirationTime.fromDays(days) })) });
 }
