@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assembleRti, bytesToHex, rtiClock, rtiSealOwner, rtiTag, sha256Hex, utf8, type RtiRow } from "../src/index.js";
+import { assembleRti, bytesToHex, checkRtiReceipt, randomBytes, rtiClock, rtiCommitment, rtiSealOwner, rtiTag, sha256Hex, utf8, type RtiReceipt, type RtiRow } from "../src/index.js";
 
 const jsonPayload = (v: unknown) => utf8(JSON.stringify(v));
 
@@ -37,41 +37,58 @@ describe("rtiClock", () => {
 });
 
 describe("RTI record", () => {
-  const hash = sha256Hex(utf8("synthetic RTI application, not a real filing"));
-  const other = sha256Hex(utf8("another application"));
+  const fileHash = sha256Hex(utf8("synthetic RTI application, not a real filing"));
+  const salt = bytesToHex(randomBytes(32));
+  const commitment = rtiCommitment(salt, fileHash);
+  const other = rtiCommitment(bytesToHex(randomBytes(32)), fileHash);
   const row = (o: Partial<RtiRow> & { body?: unknown } = {}): RtiRow => ({
     key: `0x${"0".repeat(63)}${Math.floor(Math.random() * 9) + 1}` as `0x${string}`,
-    owner: rtiSealOwner(hash),
+    owner: rtiSealOwner(commitment),
     creator: "0x1111111111111111111111111111111111111111",
     createdAt: 100n,
     expiresAt: 1_396_900n,
     creationFlags: { readonly: true, permissionlessExtension: false },
-    payload: jsonPayload(o.body ?? { v: 1, sha256: hash, due_block: "1396900" }),
+    payload: jsonPayload(o.body ?? { v: 2, commitment, due_block: "1396900" }),
     ...o,
   });
 
-  it("derives a tag and a seal address from the hash alone", () => {
-    expect(rtiTag(hash)).toMatch(/^x[0-9a-f]{24}$/);
-    expect(rtiTag(hash)).toBe(rtiTag(hash));
-    expect(rtiTag(hash)).not.toBe(rtiTag(other));
-    expect(rtiSealOwner(hash)).toMatch(/^0x[0-9a-f]{40}$/);
-    expect(rtiSealOwner(hash)).not.toBe(rtiSealOwner(other));
-    expect(bytesToHex(utf8("x"))).toBe("0x78");
+  it("stores a salted commitment that a guessed document cannot be matched against", () => {
+    expect(commitment).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(commitment).not.toBe(fileHash);
+    // Same document, different salt: unrelated values, so knowing the document does not find or confirm the record.
+    expect(other).not.toBe(commitment);
+    expect(rtiCommitment(salt, fileHash)).toBe(commitment);
+    const onChain = new TextDecoder().decode(row().payload);
+    expect(onChain).not.toContain(fileHash.slice(2));
+    expect(onChain).not.toContain(salt.slice(2));
+  });
+  it("derives a tag and a seal address from the commitment alone", () => {
+    expect(rtiTag(commitment)).toMatch(/^x[0-9a-f]{24}$/);
+    expect(rtiTag(commitment)).not.toBe(rtiTag(other));
+    expect(rtiSealOwner(commitment)).toMatch(/^0x[0-9a-f]{40}$/);
+    expect(rtiSealOwner(commitment)).not.toBe(rtiSealOwner(other));
+  });
+  it("checks a receipt against itself and against the application", () => {
+    const receipt: RtiReceipt = { v: 2, kind: "proof-of-life/rti-receipt", salt, sha256: fileHash, commitment, key: `0x${"ab".repeat(32)}`, block: "100", due_block: "1396900" };
+    expect(checkRtiReceipt(receipt)).toEqual({ consistent: true, matchesFile: null });
+    expect(checkRtiReceipt(receipt, fileHash)).toEqual({ consistent: true, matchesFile: true });
+    expect(checkRtiReceipt(receipt, sha256Hex(utf8("a different application"))).matchesFile).toBe(false);
+    expect(checkRtiReceipt({ ...receipt, salt: bytesToHex(randomBytes(32)) }, fileHash)).toEqual({ consistent: false, matchesFile: false });
   });
   it("accepts a sealed record and keeps the earliest", () => {
     const late = row({ createdAt: 500n });
     const early = row({ createdAt: 120n });
-    expect(assembleRti([late, early], hash).record?.createdAt).toBe(120n);
+    expect(assembleRti([late, early], commitment).record?.createdAt).toBe(120n);
   });
-  it("rejects records that are not sealed, name another hash, or expire elsewhere", () => {
+  it("rejects records that are not sealed, name another commitment, expire elsewhere, or use the old format", () => {
     const rows = [
       row({ owner: "0x2222222222222222222222222222222222222222" }),
       row({ creationFlags: { readonly: false, permissionlessExtension: false } }),
-      row({ body: { v: 1, sha256: other, due_block: "1396900" } }),
+      row({ body: { v: 2, commitment: other, due_block: "1396900" } }),
       row({ expiresAt: 999n }),
-      row({ body: { hello: "world" } }),
+      row({ body: { v: 1, sha256: fileHash, due_block: "1396900" } }),
     ];
-    const { record, rejected } = assembleRti(rows, hash);
+    const { record, rejected } = assembleRti(rows, commitment);
     expect(record).toBeNull();
     expect(rejected).toHaveLength(5);
   });

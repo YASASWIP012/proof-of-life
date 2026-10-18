@@ -57,26 +57,55 @@ export function rtiClock(p: RtiInput): RtiClock {
 }
 
 /**
- * The `type` of a filing record: a hash of the application's sha256. Only someone holding the application can
- * compute it, so nobody can list RTI records by type, and the filer can find theirs again from the file alone.
+ * What goes on chain instead of the application's hash: sha256("proof-of-life/rti/v1" ‖ salt ‖ sha256(file)), with a
+ * random 32-byte salt made in the browser that never leaves the device. Without the salt the value is
+ * indistinguishable from random, so nobody can test a guessed document or name against it. The filer keeps the salt
+ * in a receipt; the receipt plus the application file prove the record is theirs.
  */
-export function rtiTag(docHash: Hex): string {
-  return `x${bytesToHex(sha256(concat(utf8("proof-of-life/rti/v1"), hexToBytes(docHash)))).slice(2, 26)}`;
+export function rtiCommitment(salt: Hex, fileHash: Hex): Hex {
+  return bytesToHex(sha256(concat(utf8("proof-of-life/rti/v1"), hexToBytes(salt), hexToBytes(fileHash)))) as Hex;
+}
+
+/** The `type` of a filing record, derived from the commitment. It reveals nothing the payload does not. */
+export function rtiTag(commitment: Hex): string {
+  return `x${bytesToHex(sha256(concat(utf8("proof-of-life/rti-tag/v2"), hexToBytes(commitment)))).slice(2, 26)}`;
 }
 
 /** The record is handed to this address in the same transaction. Nobody holds its key, so nobody can delete it. */
-export function rtiSealOwner(docHash: Hex): Hex {
-  return `0x${bytesToHex(sha256(concat(utf8("proof-of-life/rti-seal/v1"), hexToBytes(docHash)))).slice(-40)}` as Hex;
+export function rtiSealOwner(commitment: Hex): Hex {
+  return `0x${bytesToHex(sha256(concat(utf8("proof-of-life/rti-seal/v2"), hexToBytes(commitment)))).slice(-40)}` as Hex;
 }
 
-export const rtiAttrs = (docHash: Hex): AttributeInputs => ({ type: str(rtiTag(docHash)) });
+export const rtiAttrs = (commitment: Hex): AttributeInputs => ({ type: str(rtiTag(commitment)) });
+
+const hex32 = z.string().regex(/^0x[0-9a-f]{64}$/);
 
 export const RtiPayload = z.object({
-  v: z.literal(1),
-  sha256: z.string().regex(/^0x[0-9a-f]{64}$/),
+  v: z.literal(2),
+  commitment: hex32,
   due_block: z.string().regex(/^\d+$/),
 });
 export type RtiPayload = z.infer<typeof RtiPayload>;
+
+/** What the filer downloads after recording. It stays with them: the salt is the only thing that links record and file. */
+export const RtiReceipt = z.object({
+  v: z.literal(2),
+  kind: z.literal("proof-of-life/rti-receipt"),
+  salt: hex32,
+  sha256: hex32,
+  commitment: hex32,
+  key: hex32,
+  block: z.string().regex(/^\d+$/),
+  due_block: z.string().regex(/^\d+$/),
+  tx: z.string().optional(),
+});
+export type RtiReceipt = z.infer<typeof RtiReceipt>;
+
+/** Checks a receipt is self-consistent and, given the application's hash, that it belongs to that application. */
+export function checkRtiReceipt(r: RtiReceipt, fileHash?: Hex): { consistent: boolean; matchesFile: boolean | null } {
+  const consistent = rtiCommitment(r.salt as Hex, r.sha256 as Hex) === r.commitment;
+  return { consistent, matchesFile: fileHash === undefined ? null : consistent && fileHash.toLowerCase() === r.sha256 };
+}
 
 export type RtiRow = {
   key: Hex;
@@ -92,13 +121,12 @@ export type RtiRecord = { key: Hex; creator: Hex; createdAt: bigint; expiresAt: 
 
 /**
  * Pure, so the trust rules can be tested without a network. A row counts only if it is read-only, sealed to the
- * record's own address, names the same hash, and expires at the block it names. The earliest valid row wins:
- * it is the oldest proof that the application existed.
+ * record's own address, names the same commitment, and expires at the block it names. The earliest valid row wins.
  */
-export function assembleRti(rows: RtiRow[], docHash: Hex): { record: RtiRecord | null; rejected: { key: Hex; reason: string }[] } {
+export function assembleRti(rows: RtiRow[], commitment: Hex): { record: RtiRecord | null; rejected: { key: Hex; reason: string }[] } {
   const rejected: { key: Hex; reason: string }[] = [];
   const valid: RtiRecord[] = [];
-  const seal = rtiSealOwner(docHash).toLowerCase();
+  const seal = rtiSealOwner(commitment).toLowerCase();
   for (const r of rows) {
     let p: RtiPayload;
     try {
@@ -107,7 +135,7 @@ export function assembleRti(rows: RtiRow[], docHash: Hex): { record: RtiRecord |
       rejected.push({ key: r.key, reason: "payload is not an RTI record" });
       continue;
     }
-    if (p.sha256 !== docHash.toLowerCase()) rejected.push({ key: r.key, reason: "names a different hash" });
+    if (p.commitment !== commitment.toLowerCase()) rejected.push({ key: r.key, reason: "names a different commitment" });
     else if (!r.creationFlags.readonly || r.owner.toLowerCase() !== seal) rejected.push({ key: r.key, reason: "not sealed: its owner could change or delete it" });
     else if (BigInt(p.due_block) !== r.expiresAt) rejected.push({ key: r.key, reason: "expires at a different block than it names" });
     else valid.push({ key: r.key, creator: r.creator, createdAt: r.createdAt, expiresAt: r.expiresAt, dueBlock: BigInt(p.due_block) });

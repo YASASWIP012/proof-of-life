@@ -1,6 +1,6 @@
 // The RTI clock: deadlines and a drafted First Appeal for a real RTI application, worked out in the browser.
-// The only thing that can leave the device is a sha256 fingerprint, and only if the filer chooses to record it.
-import { explorerAddress, loadRti, recordRti, rtiClock, sha256Hex, utf8, walletClient, type RtiKind, type RtiView } from "@proof-of-life/core";
+// The only thing that can leave the device is a salted commitment to the application, and only if the filer records it.
+import { bytesToHex, checkRtiReceipt, explorerAddress, loadRti, randomBytes, recordRti, rtiClock, rtiCommitment, RtiReceipt, sha256Hex, utf8, walletClient, type RtiKind, type RtiView } from "@proof-of-life/core";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Hex } from "viem";
@@ -39,7 +39,10 @@ export default function Rti() {
   const [kind, setKind] = useState<RtiKind>(params.get("k") === "life" ? "life" : "normal");
   const [apio, setApio] = useState(params.get("a") === "1");
   const [fee, setFee] = useState(Math.max(0, Number(params.get("f")) || 0));
-  const [hash, setHash] = useState<Hex | null>(isHash(params.get("h")) ? (params.get("h") as Hex) : null);
+  // The application's own hash never leaves this tab. Arkiv and the link carry only the salted commitment.
+  const [fileHash, setFileHash] = useState<Hex | null>(null);
+  const [commitment, setCommitment] = useState<Hex | null>(isHash(params.get("c")) ? (params.get("c") as Hex) : null);
+  const [receipt, setReceipt] = useState<RtiReceipt | null>(null);
   const [atBlock, setAtBlock] = useState<bigint | null>(/^\d+$/.test(params.get("b") ?? "") ? BigInt(params.get("b")!) : null);
   const [text, setText] = useState("");
   const [view, setView] = useState<RtiView | null>(null);
@@ -67,22 +70,23 @@ export default function Rti() {
     if (kind === "life") q.set("tm", time);
     if (apio) q.set("a", "1");
     if (fee) q.set("f", String(fee));
-    if (hash) q.set("h", hash);
+    if (commitment) q.set("c", commitment);
     if (atBlock !== null) q.set("b", atBlock.toString());
     return q;
-  }, [date, time, kind, apio, fee, hash, atBlock]);
+  }, [date, time, kind, apio, fee, commitment, atBlock]);
   useEffect(() => setParams(query, { replace: true }), [query]);
   // A saved link opened while this page is already showing: take the form from it.
   useEffect(() => {
     if (params.toString() === query.toString()) return;
-    const h = params.get("h");
+    const c = params.get("c");
     const b = params.get("b") ?? "";
     setDate(params.get("d") ?? localDate());
     setTime(params.get("tm") ?? "10:00");
     setKind(params.get("k") === "life" ? "life" : "normal");
     setApio(params.get("a") === "1");
     setFee(Math.max(0, Number(params.get("f")) || 0));
-    setHash(isHash(h) ? h : null);
+    setCommitment(isHash(c) ? c : null);
+    setReceipt(null);
     setAtBlock(/^\d+$/.test(b) ? BigInt(b) : null);
     setText("");
     setTx(null);
@@ -90,10 +94,10 @@ export default function Rti() {
   const link = `${SITE_URL}/#/rti?${query.toString()}`;
 
   useEffect(() => {
-    if (!hash) return setView(null);
+    if (!commitment) return setView(null);
     let live = true;
     setView(null);
-    read((c) => loadRti(c, hash, { atBlock: atBlock ?? undefined }))
+    read((c) => loadRti(c, commitment, { atBlock: atBlock ?? undefined }))
       .then((v) => {
         if (!live) return;
         setView(v);
@@ -103,17 +107,13 @@ export default function Rti() {
     return () => {
       live = false;
     };
-  }, [hash, atBlock]);
+  }, [commitment, atBlock]);
 
   useEffect(() => {
     if (!text.trim()) return;
     const id = setTimeout(() => {
-      const h = textHash(text);
-      if (h === hash) return;
       setErr(null);
-      setTx(null);
-      setAtBlock(null);
-      setHash(h);
+      setFileHash(textHash(text));
     }, 500);
     return () => clearTimeout(id);
   }, [text]);
@@ -121,24 +121,51 @@ export default function Rti() {
   async function pickFile(f: File | undefined) {
     if (!f) return;
     setErr(null);
-    setTx(null);
-    setAtBlock(null);
-    setHash(sha256Hex(new Uint8Array(await f.arrayBuffer())));
+    setFileHash(sha256Hex(new Uint8Array(await f.arrayBuffer())));
+  }
+
+  async function openReceipt(f: File | undefined) {
+    if (!f) return;
+    setErr(null);
+    try {
+      const r = RtiReceipt.parse(JSON.parse(await f.text()));
+      if (!checkRtiReceipt(r).consistent) throw new Error();
+      setReceipt(r);
+      setTx(null);
+      setCommitment(r.commitment as Hex);
+      setAtBlock(BigInt(r.block));
+    } catch {
+      setErr(t("rti_rec_badreceipt"));
+    }
+  }
+
+  function downloadReceipt(r: RtiReceipt) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(r, null, 2)], { type: "application/json" }));
+    a.download = `rti-receipt-block-${r.block}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   async function record() {
-    if (!hash || !clock) return;
+    if (!fileHash || !clock) return;
     setErr(null);
     try {
+      // A fresh salt per recording. It goes into the receipt and nowhere else.
+      const salt = bytesToHex(randomBytes(32)) as Hex;
+      const c = rtiCommitment(salt, fileHash);
       const key = newSecret();
       setStep("gas");
       await ensureGas(key.account.address);
       setStep("write");
-      const r = await recordRti(walletClient(key.account), readClient(), { docHash: hash, dueMs: clock.replyDueMs });
+      const r = await recordRti(walletClient(key.account), readClient(), { commitment: c, dueMs: clock.replyDueMs });
+      const v = await read((cl) => loadRti(cl, c));
+      const block = v.record?.createdAt ?? null;
+      setReceipt({ v: 2, kind: "proof-of-life/rti-receipt", salt, sha256: fileHash, commitment: c, key: r.key.toLowerCase(), block: String(block ?? 0n), due_block: r.dueBlock.toString(), tx: r.txHash });
       setTx(r.txHash);
-      const v = await read((c) => loadRti(c, hash));
       setView(v);
-      if (v.record) setAtBlock(v.record.createdAt);
+      setCommitment(c);
+      setAtBlock(block);
     } catch (e) {
       setErr((e as Error).message.slice(0, 240));
     } finally {
@@ -147,6 +174,7 @@ export default function Rti() {
   }
 
   const rec = view?.record ?? null;
+  const match = receipt && fileHash ? checkRtiReceipt(receipt, fileHash).matchesFile : null;
   const overdue = passed || !!view?.expired;
   const withTime = kind === "life";
 
@@ -217,24 +245,28 @@ export default function Rti() {
             <textarea className={inputCls} rows={3} value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
         </div>
-        {hash && (
+        {fileHash && (
           <div className="space-y-1">
             <p className="text-[13px] font-semibold text-muted">{t("rti_rec_hash")}</p>
-            <p className="t-mono mono-wrap text-[12.5px]">{hash}</p>
+            <p className="t-mono mono-wrap text-[12.5px]">{fileHash}</p>
           </div>
         )}
-        {hash && view && !rec && (
-          <div className="flex flex-wrap items-center gap-3">
-            {passed ? (
-              <Notice tone="warn">{t("rti_rec_late")}</Notice>
-            ) : (
-              <>
-                <Button onClick={record} disabled={step !== "idle"}>{step === "gas" ? t("rti_rec_gas") : step === "write" ? t("rti_rec_write") : t("rti_rec_go")}</Button>
-                <span className="text-[13.5px] text-muted">{t("rti_rec_none")}</span>
-              </>
-            )}
-          </div>
+        {receipt && fileHash && (!match ? <Notice tone="danger">{t("rti_rec_nomatch")}</Notice> : rec && receipt.commitment === commitment ? <Notice>{t("rti_rec_match")}</Notice> : null)}
+        {receipt && view && !rec && <Notice tone="warn">{t("rti_rec_norecord")}</Notice>}
+        {fileHash && !(receipt && receipt.sha256 === fileHash) && (
+          passed ? (
+            <Notice tone="warn">{t("rti_rec_late")}</Notice>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={record} disabled={step !== "idle"}>{step === "gas" ? t("rti_rec_gas") : step === "write" ? t("rti_rec_write") : t("rti_rec_go")}</Button>
+              <span className="text-[13.5px] text-muted">{t("rti_rec_none")}</span>
+            </div>
+          )
         )}
+        <label className="flex flex-wrap items-center gap-3 text-[14px]">
+          <span className="font-semibold">{t("rti_rec_open")}</span>
+          <input type="file" accept="application/json,.json" className="text-[13.5px]" onChange={(e) => openReceipt(e.target.files?.[0])} />
+        </label>
         {rec && view && (
           <div className="space-y-2 rounded-[14px] bg-paper-alt px-4 py-3 text-[14px] leading-relaxed">
             <p className="font-semibold">{t("rti_rec_t2")}</p>
@@ -243,8 +275,17 @@ export default function Rti() {
               <a className="underline decoration-dotted underline-offset-2" href={explorerAddress(rec.creator)} target="_blank" rel="noreferrer">↗</a>
             </p>
             <p>{view.expired ? t("rti_rec_gone", { block: rec.expiresAt.toString(), at: (atBlock ?? rec.createdAt).toString() }) : t("rti_rec_live", { block: rec.expiresAt.toString() })}</p>
+            <p className="text-muted">{t("rti_rec_commit")} <span className="t-mono mono-wrap text-[12px]">{commitment}</span></p>
             {tx && <p>{t("rti_rec_tx")}: <TxLink hash={tx} /></p>}
-            <p className="text-muted">{t("rti_rec_link")}</p>
+            {receipt && receipt.commitment === commitment ? (
+              <div className="space-y-2 pt-1">
+                <p>{t("rti_rec_receipt_s")}</p>
+                <Button size="sm" onClick={() => downloadReceipt(receipt)}>{t("rti_rec_receipt")}</Button>
+              </div>
+            ) : (
+              <p className="text-muted">{t("rti_rec_needreceipt")}</p>
+            )}
+            <p className="pt-1 text-muted">{t("rti_rec_link")}</p>
             <div className="flex flex-wrap items-center gap-2">
               <span className="t-mono mono-wrap text-[12px]">{link}</span>
               <Copy text={link} />
