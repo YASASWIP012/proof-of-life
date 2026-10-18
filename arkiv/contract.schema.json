@@ -1,0 +1,597 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/YASASWIP012/proof-of-life/blob/main/arkiv/contract.schema.json",
+  "title": "Proof of Life data contract on Arkiv",
+  "description": "Every entity Proof of Life writes, its typed attributes, payload and lifetime, and the rules a reader applies. Build another reader, watcher or app from this without asking us. Prose version: arkiv/schema.md.",
+  "x-network": {
+    "chainId": 7738577,
+    "rpc": "https://rpc.tiramisu.db-chain.testnet.arkiv.network",
+    "ws": "wss://rpc.tiramisu.db-chain.testnet.arkiv.network",
+    "sdk": "@arkiv-network/sdk 0.8.x"
+  },
+  "x-trust-rules": [
+    "A heartbeat, beat, manifest, chunk or envelope counts only if its $creator is the vault's creator.",
+    "A release counts only if its $creator is the custodian named for its slot in the manifest, its payload names the same slot, it is the first for that slot, and its share matches the slot's commitment: sha256(\"proof-of-life/share/v1\" ‖ vault_id ‖ share).",
+    "An ack counts only if its $creator is the custodian named for its slot.",
+    "The vault's phase follows from the heartbeat's $expiresAt and the number of valid releases; k valid releases open it."
+  ],
+  "x-entities": {
+    "vault": {
+      "writer": "activist",
+      "attributes": {
+        "project": {
+          "type": "str",
+          "value": "proof-of-life",
+          "description": "listed vaults only (and every release)"
+        },
+        "v": {
+          "type": "i32",
+          "value": 1,
+          "description": "schema version, listed vaults only"
+        },
+        "type": {
+          "type": "str",
+          "description": "\"vault\" on listed vaults; on unlisted vaults \"x\" + hex of the first 12 bytes of sha256(\"proof-of-life/kind/v1\" ‖ vault_id ‖ \"vault\")"
+        },
+        "vault_id": {
+          "type": "bytes32",
+          "description": "random 32 bytes chosen in the activist's browser; links every entity of one vault"
+        },
+        "k": {
+          "type": "i32",
+          "description": "listed only"
+        },
+        "n": {
+          "type": "i32",
+          "description": "listed only"
+        },
+        "mode": {
+          "type": "str",
+          "description": "public | newsroom, listed only"
+        },
+        "interval_s": {
+          "type": "u64",
+          "description": "listed only"
+        },
+        "grace_s": {
+          "type": "u64",
+          "description": "listed only"
+        },
+        "chunks": {
+          "type": "i32",
+          "description": "listed only"
+        },
+        "sealed_at_ms": {
+          "type": "u64",
+          "description": "listed only"
+        }
+      },
+      "payload": {
+        "contentType": "application/json",
+        "schema": {
+          "$ref": "#/$defs/Manifest"
+        }
+      },
+      "flags": {
+        "readonly": true,
+        "permissionlessExtension": true
+      },
+      "owner": "0x…dEaD (listed) or the vault's own seal address (unlisted), set in the creating batch",
+      "lifetime": "vault term: default 365 days, minimum 30; anyone may extend"
+    },
+    "chunk": {
+      "writer": "activist",
+      "attributes": {
+        "project": {
+          "type": "str",
+          "value": "proof-of-life",
+          "description": "listed vaults only (and every release)"
+        },
+        "v": {
+          "type": "i32",
+          "value": 1,
+          "description": "schema version, listed vaults only"
+        },
+        "type": {
+          "type": "str",
+          "description": "\"chunk\" on listed vaults; on unlisted vaults \"x\" + hex of the first 12 bytes of sha256(\"proof-of-life/kind/v1\" ‖ vault_id ‖ \"chunk\")"
+        },
+        "vault_id": {
+          "type": "bytes32",
+          "description": "random 32 bytes chosen in the activist's browser; links every entity of one vault"
+        },
+        "idx": {
+          "type": "i32",
+          "description": "listed only; unlisted chunks are ordered by matching their hash to manifest.chunks.hashes"
+        }
+      },
+      "payload": {
+        "contentType": "application/octet-stream",
+        "description": "up to 96 KiB of AES-256-GCM ciphertext (12-byte nonce in front); the bundle is padded to a 64 KiB bucket before encryption"
+      },
+      "flags": {
+        "readonly": true,
+        "permissionlessExtension": true
+      },
+      "owner": "same as the vault",
+      "lifetime": "vault term"
+    },
+    "envelope": {
+      "writer": "activist",
+      "attributes": {
+        "project": {
+          "type": "str",
+          "value": "proof-of-life",
+          "description": "listed vaults only (and every release)"
+        },
+        "v": {
+          "type": "i32",
+          "value": 1,
+          "description": "schema version, listed vaults only"
+        },
+        "type": {
+          "type": "str",
+          "description": "\"envelope\" on listed vaults; on unlisted vaults \"x\" + hex of the first 12 bytes of sha256(\"proof-of-life/kind/v1\" ‖ vault_id ‖ \"envelope\")"
+        },
+        "vault_id": {
+          "type": "bytes32",
+          "description": "random 32 bytes chosen in the activist's browser; links every entity of one vault"
+        },
+        "slot": {
+          "type": "i32",
+          "description": "listed only"
+        },
+        "custodian": {
+          "type": "addr",
+          "description": "the custodian's one-time key, so a custodian can find its envelopes"
+        }
+      },
+      "payload": {
+        "contentType": "application/octet-stream",
+        "description": "one key share (plus the ok and duress tokens), ECIES-encrypted to the custodian's key"
+      },
+      "flags": {
+        "readonly": true,
+        "permissionlessExtension": true
+      },
+      "owner": "same as the vault",
+      "lifetime": "vault term"
+    },
+    "heartbeat": {
+      "writer": "activist",
+      "attributes": {
+        "project": {
+          "type": "str",
+          "value": "proof-of-life",
+          "description": "listed vaults only (and every release)"
+        },
+        "v": {
+          "type": "i32",
+          "value": 1,
+          "description": "schema version, listed vaults only"
+        },
+        "type": {
+          "type": "str",
+          "description": "\"heartbeat\" on listed vaults; on unlisted vaults \"x\" + hex of the first 12 bytes of sha256(\"proof-of-life/kind/v1\" ‖ vault_id ‖ \"heartbeat\")"
+        },
+        "vault_id": {
+          "type": "bytes32",
+          "description": "random 32 bytes chosen in the activist's browser; links every entity of one vault"
+        },
+        "interval_s": {
+          "type": "u64",
+          "description": "listed only"
+        },
+        "grace_s": {
+          "type": "u64",
+          "description": "listed only"
+        }
+      },
+      "payload": {
+        "contentType": "application/octet-stream",
+        "description": "empty"
+      },
+      "flags": {
+        "readonly": true,
+        "permissionlessExtension": false
+      },
+      "owner": "the activist, so only its key can extend it",
+      "lifetime": "interval_s + grace_s, reset by every check-in (extendEntity); when it expires the vault has lapsed"
+    },
+    "beat": {
+      "writer": "activist",
+      "attributes": {
+        "project": {
+          "type": "str",
+          "value": "proof-of-life",
+          "description": "listed vaults only (and every release)"
+        },
+        "v": {
+          "type": "i32",
+          "value": 1,
+          "description": "schema version, listed vaults only"
+        },
+        "type": {
+          "type": "str",
+          "description": "\"beat\" on listed vaults; on unlisted vaults \"x\" + hex of the first 12 bytes of sha256(\"proof-of-life/kind/v1\" ‖ vault_id ‖ \"beat\")"
+        },
+        "vault_id": {
+          "type": "bytes32",
+          "description": "random 32 bytes chosen in the activist's browser; links every entity of one vault"
+        }
+      },
+      "payload": {
+        "contentType": "application/octet-stream",
+        "description": "the check-in's 16-byte token encrypted to each custodian, n × 77 bytes; only a custodian can tell ok from duress"
+      },
+      "flags": {
+        "readonly": true,
+        "permissionlessExtension": false
+      },
+      "owner": "the activist",
+      "lifetime": "interval_s + grace_s"
+    },
+    "ack": {
+      "writer": "custodian",
+      "attributes": {
+        "project": {
+          "type": "str",
+          "value": "proof-of-life",
+          "description": "listed vaults only (and every release)"
+        },
+        "v": {
+          "type": "i32",
+          "value": 1,
+          "description": "schema version, listed vaults only"
+        },
+        "type": {
+          "type": "str",
+          "description": "\"ack\" on listed vaults; on unlisted vaults \"x\" + hex of the first 12 bytes of sha256(\"proof-of-life/kind/v1\" ‖ vault_id ‖ \"ack\")"
+        },
+        "vault_id": {
+          "type": "bytes32",
+          "description": "random 32 bytes chosen in the activist's browser; links every entity of one vault"
+        },
+        "slot": {
+          "type": "i32",
+          "description": "listed only"
+        }
+      },
+      "payload": {
+        "contentType": "application/octet-stream",
+        "description": "empty"
+      },
+      "flags": {
+        "readonly": true,
+        "permissionlessExtension": false
+      },
+      "owner": "the custodian",
+      "lifetime": "14 days, renewed by the custodian's watcher"
+    },
+    "release": {
+      "writer": "custodian",
+      "attributes": {
+        "project": {
+          "type": "str",
+          "value": "proof-of-life",
+          "description": "on every release, listed vault or not"
+        },
+        "v": {
+          "type": "i32",
+          "value": 1,
+          "description": "schema version, listed vaults only"
+        },
+        "type": {
+          "type": "str",
+          "value": "release",
+          "description": "always plain, so released evidence is findable"
+        },
+        "vault_id": {
+          "type": "bytes32",
+          "description": "random 32 bytes chosen in the activist's browser; links every entity of one vault"
+        },
+        "slot": {
+          "type": "i32",
+          "description": "the custodian's slot"
+        },
+        "vault_creator": {
+          "type": "addr",
+          "description": "the vault's creator"
+        }
+      },
+      "payload": {
+        "contentType": "application/json",
+        "schema": {
+          "$ref": "#/$defs/ReleasePayload"
+        }
+      },
+      "flags": {
+        "readonly": true,
+        "permissionlessExtension": true
+      },
+      "owner": "0x…dEaD, set in the creating batch",
+      "lifetime": "vault term; anyone may extend"
+    },
+    "rti": {
+      "writer": "a one-time key in the filer's browser",
+      "attributes": {
+        "type": {
+          "type": "str",
+          "description": "x + hex of the first 12 bytes of sha256(\"proof-of-life/rti-tag/v2\" ‖ commitment)"
+        }
+      },
+      "payload": {
+        "contentType": "application/json",
+        "schema": {
+          "$ref": "#/$defs/RtiPayload"
+        }
+      },
+      "flags": {
+        "readonly": true,
+        "permissionlessExtension": false
+      },
+      "owner": "the record's own seal address: last 20 bytes of sha256(\"proof-of-life/rti-seal/v2\" ‖ commitment)",
+      "lifetime": "until due_block + 165 days: the First Appeal (s.19(1)), its decision (s.19(6)) and the second appeal (s.19(3))"
+    }
+  },
+  "$defs": {
+    "Manifest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "number",
+          "const": 1
+        },
+        "vault_id": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{64}$"
+        },
+        "k": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 9007199254740991
+        },
+        "n": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 15
+        },
+        "custodians": {
+          "minItems": 2,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "address": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]*$"
+              },
+              "pubkey": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]*$"
+              }
+            },
+            "required": [
+              "slot",
+              "address",
+              "pubkey"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "commitments": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{64}$"
+          }
+        },
+        "chunks": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "hashes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^0x[0-9a-fA-F]{64}$"
+              }
+            },
+            "bytes": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "count",
+            "hashes",
+            "bytes"
+          ],
+          "additionalProperties": false
+        },
+        "ciphertext_sha256": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{64}$"
+        },
+        "interval_s": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "grace_s": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "release": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "public",
+                "newsroom"
+              ]
+            },
+            "newsroom_pubkey": {
+              "type": "string",
+              "pattern": "^0x[0-9a-fA-F]*$"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "sealed_at_ms": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "listed": {
+          "type": "boolean"
+        },
+        "tag": {
+          "type": "string",
+          "maxLength": 24
+        }
+      },
+      "required": [
+        "v",
+        "vault_id",
+        "k",
+        "n",
+        "custodians",
+        "commitments",
+        "chunks",
+        "ciphertext_sha256",
+        "interval_s",
+        "grace_s",
+        "release",
+        "sealed_at_ms"
+      ],
+      "additionalProperties": false
+    },
+    "ReleasePayload": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "number",
+          "const": 1
+        },
+        "slot": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "share": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]*$"
+        },
+        "sealed_to_newsroom": {
+          "type": "boolean"
+        },
+        "observed_lapse_block": {
+          "type": "string",
+          "pattern": "^\\d+$"
+        }
+      },
+      "required": [
+        "v",
+        "slot",
+        "share",
+        "sealed_to_newsroom",
+        "observed_lapse_block"
+      ],
+      "additionalProperties": false
+    },
+    "RtiPayload": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "number",
+          "const": 2
+        },
+        "commitment": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "due_block": {
+          "type": "string",
+          "pattern": "^\\d+$"
+        }
+      },
+      "required": [
+        "v",
+        "commitment",
+        "due_block"
+      ],
+      "additionalProperties": false
+    },
+    "RtiReceipt": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "number",
+          "const": 2
+        },
+        "kind": {
+          "type": "string",
+          "const": "proof-of-life/rti-receipt"
+        },
+        "salt": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "commitment": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^0x[0-9a-f]{64}$"
+        },
+        "block": {
+          "type": "string",
+          "pattern": "^\\d+$"
+        },
+        "due_block": {
+          "type": "string",
+          "pattern": "^\\d+$"
+        },
+        "tx": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "kind",
+        "salt",
+        "sha256",
+        "commitment",
+        "key",
+        "block",
+        "due_block"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

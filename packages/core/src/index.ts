@@ -7,3 +7,4 @@ export * from "./arkiv/writes.js";
 export * from "./arkiv/reads.js";
 export * from "./arkiv/events.js";
 export * from "./arkiv/custody.js";
+export * from "./arkiv/contract.js";

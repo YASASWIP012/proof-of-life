@@ -1,5 +1,7 @@
 # Proof of Life: data contract on Arkiv
 
+Machine-readable version: [`contract.schema.json`](contract.schema.json) (JSON Schema, generated from the code by `npx tsx scripts/contract.ts`; a test fails if it drifts). A reader built from it alone: [`examples/list-released.mjs`](../examples/list-released.mjs).
+
 This file is the whole contract. Another team can build a reader, a custodian bot or a different front end from it, with no code or permission from us. Everything below runs on the Tiramisu testnet (chain `7738577`) with `@arkiv-network/sdk` 0.8.1. The source of truth in code is [`packages/core/src/arkiv/schema.ts`](../packages/core/src/arkiv/schema.ts).
 
 ## The idea in one paragraph

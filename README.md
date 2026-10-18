@@ -6,7 +6,7 @@ A dead-hand vault for India's RTI activists, whistleblowers and the journalists 
 
 If you have filed an RTI application, the [RTI clock](https://proof-of-life-khaki.vercel.app/#/rti) works for you today: it gives your reply deadline and appeal dates under the RTI Act, drafts the First Appeal in English, Hindi or Telugu, and puts nothing sensitive on chain.
 
-Built on [Arkiv](https://arkiv.network), the Web3 database, for **Arkiv: Global Tour Stop** (9 to 18 October 2026). Tracks: **Best Indian Use Case**, **Censorship Resistance**, **Privacy**.
+Built on [Arkiv](https://arkiv.network), the Web3 database, for **Arkiv: Global Tour Stop** (9 to 18 October 2026). Tracks: **Best Indian Use Case**, **Censorship Resistance**, **Privacy**, **Security**, **Open Source**.
 
 | | |
 |---|---|
@@ -117,6 +117,14 @@ Q
 Each row's `vault_id` and `vault_creator` open the vault (`/#/v/<vault_id>/<vault_creator>`); `$creator` must be the custodian named for that slot in the manifest, which every reader checks. The CLI does the same with `proof-of-life released`.
 
 **The vault that stops during judging:** `lapses-oct-21` was sealed on 17 October in transactions [`0x21035f1e…`](https://tiramisu.explorer.arkiv.network/tx/0x21035f1ef9885badcb44f6cd9691b307e43f600d8dab8af0271dca7bea7c6af9) (ciphertext) and [`0xcac01637…`](https://tiramisu.explorer.arkiv.network/tx/0xcac016376c837a7408ee421a3fa05cea971ed1fa7bd872356bb08d9568982366) (manifest, envelopes and heartbeat). Its heartbeat stops at 12:00 IST on 21 October; the keeper's custodians then release it, and the release transactions appear on its page and in the call above.
+
+## Why Security: forged data never counts
+
+A forged release could open a vault early; a forged heartbeat could keep a dead activist looking alive. Every reader here (the site, the CLI, [`reader.html`](reader.html) and [`examples/list-released.mjs`](examples/list-released.mjs)) decides trust from the on-chain `$creator`, never from a field anyone can write. A piece counts only if its creator is the custodian named for that slot in the sealed manifest and its share matches the commitment sealed with the vault; a heartbeat counts only if the vault's creator wrote it, and it has permissionless extension off, so nobody else can keep it going. The [released demo vault](https://proof-of-life-khaki.vercel.app/#/v/0xff209ceea0104dab5d737fc1e7d5c740c717832d74af8e8970dafd1cb7077bca/0x126B45be97c649DcA7A44e3eB41e8dacf79436d8) carries a forged piece and a forged heartbeat written by a stranger; its page lists both as ignored, with the reason, and the directory counts only valid pieces.
+
+## Why Open Source: build on it without asking
+
+The code is MIT and the data contract is public in two forms: [`arkiv/schema.md`](arkiv/schema.md) in prose and [`arkiv/contract.schema.json`](arkiv/contract.schema.json) as JSON Schema, generated from the schemas the app validates with (a test fails if they drift). [`examples/list-released.mjs`](examples/list-released.mjs) is about 40 lines using only the Arkiv SDK: it lists released evidence and applies the same `$creator` and commitment checks, so a newsroom or legal-aid group can run its own reader or watcher with nothing of ours. The CLI, the one-file reader and the [custodian watcher workflow](examples/custodian-watcher.yml) read the same public entities.
 
 ## Run your own custodian watcher
 
