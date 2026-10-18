@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
-  ackCustody, duressSignal, listVaults, loadCiphertext, loadVault, releaseMyShare, socketClient, publicClient, unsealVault, unwrapKey,
+  ackCustody, duressSignal, listReleased, listVaults, loadCiphertext, loadVault, releaseMyShare, socketClient, publicClient, unsealVault, unwrapKey,
   vaultStatus, walletClient, watchVault, BLOCK_SECONDS, type VaultView, type WrappedKey,
 } from "@proof-of-life/core";
 import { privateKeyToAccount } from "viem/accounts";
@@ -70,8 +70,15 @@ async function main() {
       }
       return 0;
     }
+    case "released": {
+      // Released evidence, found from the chain alone, including vaults that were unlisted while alive.
+      for (const r of await listReleased(reader)) log(`${r.vaultId} ${r.creator} pieces ${r.pieces} first at block ${r.firstBlock}`);
+      return 0;
+    }
     case "status": {
-      const v = await loadVault(reader, vaultId, creator);
+      const at = flag("at");
+      const v = await loadVault(reader, vaultId, creator, at ? { atBlock: BigInt(at) } : {});
+      if (at) log(`as of block ${at}`);
       printVault(v);
       return EXIT[v.status.phase];
     }
@@ -144,8 +151,9 @@ async function main() {
     default:
       log(`proof-of-life: dead-hand vaults on Arkiv
 
-  proof-of-life vaults                                   list every vault and its phase
-  proof-of-life status  <vault_id> <creator>             phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released)
+  proof-of-life vaults                                   list listed vaults and their phase
+  proof-of-life released                                 list released evidence, including vaults unlisted while alive
+  proof-of-life status  <vault_id> <creator> [--at N]    phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released); --at reads it as of block N
   proof-of-life watch   <vault_id> <creator> [--key-file f --auto-release]
   proof-of-life ack     <vault_id> <creator> --key-file f   confirm or renew custody
   proof-of-life release <vault_id> <creator> --key-file f   publish your piece (only after the heartbeat stops)

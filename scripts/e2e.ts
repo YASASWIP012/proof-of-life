@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 import { createWalletClient, formatEther, http, parseEther, type Hex } from "viem";
 import { tiramisu } from "@arkiv-network/sdk/chains";
 import {
-  ackCustody, checkIn, compressPublicKey, createVault, loadCiphertext, loadVault, publicClient, randomBytes, releaseMyShare,
+  ackCustody, checkIn, compressPublicKey, extendableKeys, createVault, loadCiphertext, loadVault, publicClient, randomBytes, releaseMyShare,
   sealVault, unsealVault, utf8, walletClient,
 } from "@proof-of-life/core";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
@@ -42,7 +42,7 @@ step(`sealed locally: ${sealed.chunks.length} chunks`);
 const chunksPerTx = Number(process.env.CHUNKS_PER_TX ?? 2);
 const txs: Hex[] = [];
 const res = await createVault(walletClient(activist, { rpc }), reader, {
-  sealed, k: 2, intervalS: 40, graceS: 20, mode: "public", listed: process.env.LISTED !== "0", vaultDays: 30, chunksPerTx,
+  sealed, k: 2, intervalS: 40, graceS: 20, mode: "public", listed: process.env.LISTED !== "0", keepAliveByAnyone: process.env.KEEP !== "0", vaultDays: 30, chunksPerTx,
   custodians: cs.map((c) => ({ address: c.address, pubkey: bytesToHex(pub(c.secret)) })),
 }, (p) => {
   if (p.txHash) txs.push(p.txHash);
@@ -54,7 +54,7 @@ let v = await loadVault(reader, sealed.vaultId, activist.address);
 step(`loaded: phase ${v.status.phase}, sealed ${v.sealed}, envelopes sealed ${v.envelopes.filter((e) => e.sealed).length}/3`);
 report.afterCreate = { phase: v.status.phase, sealed: v.sealed };
 
-const acks = await Promise.all(cs.map((c, i) => ackCustody(walletClient(c, { rpc }), { vaultId: sealed.vaultId, slot: i + 1 })));
+const acks = await Promise.all(cs.map((c, i) => ackCustody(walletClient(c, { rpc }), { vaultId: sealed.vaultId, slot: i + 1, listed: process.env.LISTED !== "0" })));
 report.ackGas = await gasUsed(acks[0].txHash);
 step("3 acks");
 
@@ -69,8 +69,9 @@ try {
 
 // The activist cannot delete sealed data.
 try {
+  if (process.env.KEEP === "0") throw new Error("skipped: with keep-alive off the activist owns its data by design");
   await walletClient(activist, { rpc }).deleteEntity({ entityKey: v.key });
-  report.activistDeleteSealed = "DELETED (bad)";
+  report.activistDeleteSealed = process.env.KEEP === "0" ? "deleted (expected: keep-alive off leaves ownership with the activist)" : "DELETED (bad)";
 } catch (e) {
   report.activistDeleteSealed = `refused: ${(e as Error).message.split("\n")[0]}`;
 }
@@ -84,7 +85,10 @@ try {
 step("negative checks done");
 
 const before = v.heartbeat!.expiresAt;
-const ci = await checkIn(walletClient(activist, { rpc }), { heartbeatKey: res.heartbeatKey, intervalS: 40, graceS: 20 });
+// Carry forward everything the activist may extend. With KEEP=0 this is the case that used to revert the batch.
+const carry = await extendableKeys(reader, v, "activist");
+report.carryForward = carry.length;
+const ci = await checkIn(walletClient(activist, { rpc }), { heartbeatKey: res.heartbeatKey, intervalS: 40, graceS: 20, sealed: carry, head: v.head, vaultDays: 31 });
 report.checkInGas = await gasUsed(ci.txHash);
 v = await loadVault(reader, sealed.vaultId, activist.address);
 report.checkInMovedExpiry = `${before} -> ${v.heartbeat?.expiresAt}`;

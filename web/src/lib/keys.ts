@@ -4,14 +4,19 @@
 //
 // Vaults are never stored here. One key seals one vault, so the app finds a key's vaults on Arkiv itself
 // (vaults created by the key, or envelopes addressed to it).
-import { bytesToHex, compressPublicKey, fromUtf8, hexToBytes, openBlob, sealBlob, utf8, type SealedBlob } from "@proof-of-life/core";
+import { bytesToHex, compressPublicKey, fromUtf8, hexToBytes, newBeatTokens, openBlob, randomBytes, sealBlob, toBase64, utf8, type BeatTokens, type SealedBlob } from "@proof-of-life/core";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import type { Hex } from "viem";
 import { privateKeyToAccount, publicKeyToAddress, type PrivateKeyAccount } from "viem/accounts";
 
 export type Role = "activist" | "custodian";
 
-type Payload = { secret: Hex; role: Role; label: string; createdMs: number; duress: boolean };
+/**
+ * What a blob holds once opened. There is no duress flag: `tok` is the token this blob checks in with, random
+ * bytes either way. Only the blob opened by the real passphrase also holds `tokens`, which go to the custodians
+ * at sealing so they can tell an ok check-in from a forced one. `pad` keeps every blob the same size.
+ */
+type Payload = { secret: Hex; role: Role; label: string; createdMs: number; tok?: Hex; tokens?: { ok: Hex; duress: Hex }; pad?: string };
 
 export type OpenKey = {
   account: PrivateKeyAccount & { secret: Uint8Array };
@@ -19,8 +24,10 @@ export type OpenKey = {
   label: string;
   createdMs: number;
   pubkey: Hex;
-  /** Opened with the duress passphrase: a "check-in" stops the heartbeat instead of extending it. */
-  duress: boolean;
+  /** The token this session checks in with. The app never knows whether it means ok or duress. */
+  tok: Uint8Array | null;
+  /** Present only when opened with the real passphrase: the pair handed to custodians at sealing. */
+  tokens: BeatTokens | null;
 };
 
 const STORE = "pol.blobs.v2";
@@ -43,7 +50,12 @@ const opened = new Map<string, OpenKey>();
 function toOpenKey(p: Payload): OpenKey {
   const secret = hexToBytes(p.secret);
   const account = Object.assign(privateKeyToAccount(p.secret), { secret });
-  return { account, role: p.role, label: p.label, createdMs: p.createdMs, duress: p.duress, pubkey: bytesToHex(compressPublicKey(secp256k1.getPublicKey(secret, true))) };
+  return {
+    account, role: p.role, label: p.label, createdMs: p.createdMs,
+    pubkey: bytesToHex(compressPublicKey(secp256k1.getPublicKey(secret, true))),
+    tok: p.tok ? hexToBytes(p.tok) : null,
+    tokens: p.tokens ? { ok: hexToBytes(p.tokens.ok), duress: hexToBytes(p.tokens.duress) } : null,
+  };
 }
 
 export function newSecret() {
@@ -52,20 +64,32 @@ export function newSecret() {
   return { secret, account, pubkey: bytesToHex(compressPublicKey(secp256k1.getPublicKey(secret, true))) };
 }
 
+const PAD_TO = 480;
+const padded = (p: Payload) => {
+  const json = JSON.stringify(p);
+  return utf8(JSON.stringify({ ...p, pad: toBase64(randomBytes(Math.max(0, Math.ceil((PAD_TO - json.length) * 0.75)))) }));
+};
+
 /**
- * Makes a key and seals it. With a duress passphrase, a second blob holds the same key marked as duress, so the
- * two are indistinguishable at rest. Returns the new blobs for an immediate backup download.
+ * Makes a key and seals it as two blobs of the same size. With a duress passphrase the second blob holds the same
+ * key and the duress token; without one, the second blob is a decoy sealed under a random passphrase nobody knows.
+ * Either way a phone shows two indistinguishable blobs per key, so it never reveals whether a duress passphrase exists.
  */
 export async function createKey(role: Role, passphrase: string, label: string, duressPassphrase?: string): Promise<{ key: OpenKey; blobs: SealedBlob[] }> {
   if (duressPassphrase && duressPassphrase === passphrase) throw new Error("the duress passphrase must differ from your passphrase");
   const { secret } = newSecret();
-  const base: Payload = { secret: bytesToHex(secret), role, label, createdMs: Date.now(), duress: false };
-  const blobs = [await sealBlob(utf8(JSON.stringify(base)), passphrase)];
-  if (duressPassphrase) blobs.push(await sealBlob(utf8(JSON.stringify({ ...base, duress: true })), duressPassphrase));
-  // Shuffle so the order does not tell which blob is the duress twin.
-  if (blobs.length === 2 && Math.random() < 0.5) blobs.reverse();
+  const t = newBeatTokens();
+  const tokens = { ok: bytesToHex(t.ok), duress: bytesToHex(t.duress) };
+  const base: Payload = { secret: bytesToHex(secret), role, label, createdMs: Date.now() };
+  const real: Payload = role === "activist" ? { ...base, tok: tokens.ok, tokens } : base;
+  const blobs = [await sealBlob(padded(real), passphrase)];
+  if (role === "activist") {
+    const second: Payload = duressPassphrase ? { ...base, tok: tokens.duress } : { ...base, secret: bytesToHex(randomBytes(32)), tok: bytesToHex(randomBytes(16)) };
+    blobs.push(await sealBlob(padded(second), duressPassphrase ?? bytesToHex(randomBytes(24))));
+    if (Math.random() < 0.5) blobs.reverse();
+  }
   saveBlobs([...loadBlobs(), ...blobs]);
-  const key = toOpenKey(base);
+  const key = toOpenKey(real);
   opened.set(key.account.address.toLowerCase(), key);
   return { key, blobs };
 }

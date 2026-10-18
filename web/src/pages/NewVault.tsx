@@ -30,10 +30,10 @@ export default function NewVault() {
         />
       </div>
     );
-  return <Form account={acct.account} />;
+  return <Form account={acct.account} keyInfo={acct} />;
 }
 
-function Form({ account }: { account: OpenKey["account"] }) {
+function Form({ account, keyInfo: key }: { account: OpenKey["account"]; keyInfo: OpenKey }) {
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
@@ -73,6 +73,7 @@ function Form({ account }: { account: OpenKey["account"] }) {
         title, note, k,
         files: await Promise.all(files.map(async (f) => ({ name: f.name, type: f.type || "application/octet-stream", bytes: new Uint8Array(await f.arrayBuffer()) }))),
         custodianPubKeys: custodians.map((c) => hexToBytes(c.pubkey)),
+        beatTokens: key.tokens ?? undefined,
       });
       setLog((l) => [...l, { text: `Encrypted ${files.length} file(s) in this browser; ${sealed.chunks.length} ciphertext chunk(s).` }]);
       await ensureGas(account.address, BigInt(sealed.chunks.length + 2) * 4_000_000_000_000_000n);

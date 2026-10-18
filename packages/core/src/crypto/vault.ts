@@ -4,6 +4,7 @@ import { open, seal } from "./aead.js";
 import { bytesToHex, concat, equalBytes, fromBase64, fromUtf8, hexToBytes, randomBytes, toBase64, utf8, type Hex } from "./bytes.js";
 import { decryptWith, encryptTo } from "./ecies.js";
 import { combine, split } from "./shamir.js";
+import type { BeatTokens } from "./duress.js";
 
 /** Largest ciphertext slice per Arkiv entity. The payload cap is 128 KiB; the rest is headroom. */
 export const CHUNK_BYTES = 96 * 1024;
@@ -51,6 +52,8 @@ export function sealVault(input: {
   k: number;
   custodianPubKeys: Uint8Array[];
   now?: number;
+  /** The activist key's ok/duress tokens, delivered to each custodian inside its envelope. */
+  beatTokens?: BeatTokens;
 }): SealedVault {
   const vaultId = bytesToHex(randomBytes(32));
   const bundle: Bundle = {
@@ -78,17 +81,25 @@ export function sealVault(input: {
     ciphertextHash: sha256Hex(ciphertext),
     shares,
     commitments: shares.map((s) => shareCommitment(vaultId, s)),
-    envelopes: shares.map((s, i) => encryptTo(input.custodianPubKeys[i], s, envelopeAad(vaultId, s[0]))),
+    // Envelope plaintext: the share, then the ok and duress tokens when the activist key has them.
+    envelopes: shares.map((s, i) => encryptTo(input.custodianPubKeys[i], input.beatTokens ? concat(s, input.beatTokens.ok, input.beatTokens.duress) : s, envelopeAad(vaultId, s[0]))),
   };
 }
 
 /** A custodian opens its envelope and checks the share against the public commitment before trusting it. */
 export function openEnvelope(vaultId: Hex, slot: number, envelope: Uint8Array, custodianSecret: Uint8Array, commitment: Hex): Uint8Array {
-  const share = decryptWith(custodianSecret, envelope, envelopeAad(vaultId, slot));
+  return openEnvelopeFull(vaultId, slot, envelope, custodianSecret, commitment).share;
+}
+
+/** Opens an envelope and also returns the activist's ok/duress tokens, when the envelope carries them. */
+export function openEnvelopeFull(vaultId: Hex, slot: number, envelope: Uint8Array, custodianSecret: Uint8Array, commitment: Hex): { share: Uint8Array; tokens: BeatTokens | null } {
+  const plain = decryptWith(custodianSecret, envelope, envelopeAad(vaultId, slot));
+  const share = plain.length === 33 + 32 ? plain.slice(0, 33) : plain;
+  const tokens = plain.length === 33 + 32 ? { ok: plain.slice(33, 49), duress: plain.slice(49, 65) } : null;
   if (share[0] !== slot || !equalBytes(hexToBytes(shareCommitment(vaultId, share)), hexToBytes(commitment))) {
     throw new Error(`share in slot ${slot} does not match its public commitment`);
   }
-  return share;
+  return { share, tokens };
 }
 
 export type ShareCheck = { share: Uint8Array; ok: boolean; reason?: string };

@@ -2,12 +2,11 @@
 import type { Hex } from "viem";
 import { bytesToHex, hexToBytes } from "../crypto/bytes.js";
 import { encryptTo } from "../crypto/ecies.js";
-import { openEnvelope } from "../crypto/vault.js";
-import { readBeat } from "../crypto/duress.js";
+import { openEnvelope, openEnvelopeFull } from "../crypto/vault.js";
+import { classifyToken, readBeatToken } from "../crypto/duress.js";
 import type { PublicClient, WalletClient } from "./client.js";
 import type { VaultView } from "./reads.js";
 import { mayRelease } from "./status.js";
-import { isListed } from "./schema.js";
 import { publishRelease } from "./writes.js";
 
 export class NotYet extends Error {
@@ -18,7 +17,14 @@ export class NotYet extends Error {
 
 /** What this custodian's slot of the latest check-in note says. Only the custodian's own key can read it. */
 export function duressSignal(view: VaultView, slot: number, secret: Uint8Array): "ok" | "duress" | null {
-  return view.lastBeat ? readBeat(view.vaultId, view.lastBeat.payload, slot, secret) : null;
+  const env = view.envelopes.find((e) => e.slot === slot);
+  if (!view.lastBeat || !env) return null;
+  try {
+    const { tokens } = openEnvelopeFull(view.vaultId, slot, env.payload, secret, view.manifest.commitments[slot - 1] as Hex);
+    return classifyToken(readBeatToken(view.vaultId, view.lastBeat.payload, slot, secret), tokens);
+  } catch {
+    return null;
+  }
 }
 
 export async function releaseMyShare(wallet: WalletClient, reader: PublicClient, view: VaultView, secret: Uint8Array) {
@@ -35,7 +41,7 @@ export async function releaseMyShare(wallet: WalletClient, reader: PublicClient,
   const body = toNewsroom ? encryptTo(hexToBytes(view.manifest.release.newsroom_pubkey!), share) : share;
   return publishRelease(wallet, reader, {
     vaultId: view.vaultId,
-    listed: isListed(view.manifest),
+    vaultCreator: view.creator,
     payload: { v: 1, slot: seat.slot, share: bytesToHex(body), sealed_to_newsroom: toNewsroom, observed_lapse_block: view.head.toString() },
   });
 }

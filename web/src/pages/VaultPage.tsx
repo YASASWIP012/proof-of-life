@@ -1,9 +1,9 @@
-import { keepAlive, loadCiphertext, unsealVault, vaultStatus, verificationQueries, type VaultView, type VaultFile } from "@proof-of-life/core";
+import { extendableKeys, keepAlive, loadCiphertext, loadVault, unsealVault, vaultStatus, verificationQueries, type VaultView, type VaultFile } from "@proof-of-life/core";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { Hex } from "viem";
 import { Pulse } from "../components/Pulse";
-import { Button, Card, Copy, Notice, PhaseBadge, TxLink } from "../components/ui";
+import { Button, Card, Copy, Notice, PhaseBadge, TxLink, inputCls } from "../components/ui";
 import { useHead, useVault } from "../hooks/useVault";
 import { blocksToSeconds, duration, fmtBytes, short } from "../lib/format";
 import { useI18n } from "../lib/i18n";
@@ -158,6 +158,7 @@ function VaultBody({ view, fetchedAt, events, refresh }: { view: VaultView; fetc
           </ul>
         </Card>
 
+        <AsOf view={view} />
         <VerifyPanel view={view} />
       </div>
     </div>
@@ -221,7 +222,7 @@ function KeepAlive({ view, onDone }: { view: VaultView; onDone: () => void }) {
     try {
       const w = await sessionWallet();
       const yearOut = view.head + 365n * 43_200n;
-      const keys = view.sealedKeys.filter((k) => k.expiresAt < yearOut).map((k) => k.key);
+      const keys = (await read((c) => extendableKeys(c, view, "anyone"))).filter((k) => k.expiresAt < yearOut).map((k) => k.key);
       if (keys.length === 0) return setState("Everything is already kept for at least a year.");
       setState(`Extending ${keys.length} sealed entities…`);
       const r = await keepAlive(w, keys, 366);
@@ -237,6 +238,34 @@ function KeepAlive({ view, onDone }: { view: VaultView; onDone: () => void }) {
       <p className="mt-2 text-xs text-muted">{t("v_keepalive_d")}</p>
       {state && <p className="mt-2 break-all font-mono text-xs">{state}</p>}
     </div>
+  );
+}
+
+/** Reads the vault as it stood at a past block, so anyone can show the heartbeat was alive (or gone) at that moment. */
+function AsOf({ view }: { view: VaultView }) {
+  const [block, setBlock] = useState(String(view.head - 43_200n > view.createdAt ? view.head - 43_200n : view.createdAt));
+  const [out, setOut] = useState<string>("");
+  const go = async () => {
+    setOut("Reading…");
+    try {
+      const at = BigInt(block);
+      const past = await read((c) => loadVault(c, view.vaultId, view.creator, { atBlock: at }));
+      const hb = past.heartbeat;
+      setOut(`At block ${at}: ${past.status.phase}${hb ? `, heartbeat valid until block ${hb.expiresAt}` : ", no heartbeat"}, ${past.releases.filter((r) => r.valid).length} valid piece(s).`);
+    } catch (e) {
+      setOut((e as Error).message.split("\n")[0]);
+    }
+  };
+  return (
+    <Card>
+      <h2 className="font-serif text-lg font-bold">As of an earlier block</h2>
+      <p className="mt-1 text-sm text-muted">The same query, read at a past block with Arkiv's atBlock. It proves what state the vault was in at that moment, for example that the activist was still checking in.</p>
+      <div className="mt-3 flex gap-2">
+        <input className={`${inputCls} font-mono`} value={block} onChange={(e) => setBlock(e.target.value.replace(/[^0-9]/g, ""))} />
+        <Button variant="ghost" onClick={go}>Read</Button>
+      </div>
+      {out && <p className="mt-2 text-sm">{out}</p>}
+    </Card>
   );
 }
 

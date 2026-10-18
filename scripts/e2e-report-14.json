@@ -1,0 +1,62 @@
+{
+  "run": 14,
+  "sdk": "0.8.1",
+  "started": "2026-10-18T05:33:08.625Z",
+  "createTxs": [
+    {
+      "h": "0xa805156ee701ff0392ff2f35e15eef5616cd5a2a4986e1ce0d623659c60aa3e3",
+      "gas": "3958060",
+      "glm": "0.00395806000791612"
+    },
+    {
+      "h": "0x3faa9b7b49e14af4cc485e21ee2c4658c5c0c7dde87d3de057f668f18ef9eb46",
+      "gas": "3958150",
+      "glm": "0.0039581500079163"
+    },
+    {
+      "h": "0x12c0350544c3142960f1ab75fd70883aff004e3a37d3c2e13cb84d5aa56d5227",
+      "gas": "189610",
+      "glm": "0.00018961000037922"
+    },
+    {
+      "h": "0xf76f6aaa97be5b49680240f6bb228662ccfb32105c7bfbc930f8ce08fa5b0ab1",
+      "gas": "490808",
+      "glm": "0.000490808000981616"
+    }
+  ],
+  "afterCreate": {
+    "phase": "alive",
+    "sealed": false
+  },
+  "ackGas": {
+    "gas": "105384",
+    "glm": "0.000105384000210768"
+  },
+  "earlyReleaseRefused": "the heartbeat is alive; a custodian may only release after it stops",
+  "activistDeleteSealed": "refused: skipped: with keep-alive off the activist owns its data by design",
+  "strangerExtendHeartbeat": "refused: Transaction failed: entity 0x32f0ffea…fa7e34 is owned by 0xBe53b3873a4209619A23Df7b27b9adF2376441A4, not 0x94a5964Ce6C432b2eb7c54088874e9BF4472E17A",
+  "carryForward": 7,
+  "checkInGas": {
+    "gas": "80000",
+    "glm": "0.00008000000016"
+  },
+  "checkInMovedExpiry": "725962 -> 725971",
+  "releaseGas": {
+    "gas": "132720",
+    "glm": "0.00013272000026544"
+  },
+  "final": {
+    "phase": "released",
+    "verified": true,
+    "files": [
+      "a.txt",
+      "noise.bin"
+    ],
+    "bigMatches": true
+  },
+  "vault": {
+    "vaultId": "0xb275b2962a280d487ac72b580ddfd9acbe6097d509b47aa2df366fffba0f21d3",
+    "creator": "0xBe53b3873a4209619A23Df7b27b9adF2376441A4"
+  },
+  "seconds": 137.609
+}

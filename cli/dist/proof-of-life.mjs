@@ -49941,6 +49941,7 @@ var PROJECT = "proof-of-life";
 var SCHEMA_VERSION = 1;
 var SEAL_ADDRESS = "0x000000000000000000000000000000000000dEaD";
 var BLOCK_SECONDS = 2;
+var KINDS = ["vault", "chunk", "envelope", "heartbeat", "beat", "ack", "release"];
 var LIFETIME = {
   /** A custodian's "I still hold my key" lease. Renewed by the custodian's watcher. */
   ackDays: 14,
@@ -49948,14 +49949,16 @@ var LIFETIME = {
   minVaultDays: 30,
   defaultVaultDays: 365
 };
-var base = (kind, vaultId, listed = true) => ({
-  ...listed ? { project: str(PROJECT) } : {},
-  v: i32(SCHEMA_VERSION),
-  type: str(kind),
-  vault_id: bytes32(vaultId)
-});
+function kindTag(vaultId, kind) {
+  return `x${bytesToHex2(sha256(concat(utf8("proof-of-life/kind/v1"), hexToBytes2(vaultId), utf8(kind)))).slice(2, 26)}`;
+}
+function kindOf(type, vaultId) {
+  if (KINDS.includes(type)) return type;
+  return KINDS.find((k) => kindTag(vaultId, k) === type) ?? null;
+}
+var base = (kind, vaultId, listed = true) => listed ? { project: str(PROJECT), v: i32(SCHEMA_VERSION), type: str(kind), vault_id: bytes32(vaultId) } : { type: str(kindTag(vaultId, kind)), vault_id: bytes32(vaultId) };
 var attrs = {
-  vault: (p) => ({
+  vault: (p) => !p.listed ? base("vault", p.vaultId, false) : {
     ...base("vault", p.vaultId, p.listed),
     k: i32(p.k),
     n: i32(p.n),
@@ -49964,18 +49967,24 @@ var attrs = {
     grace_s: u64(BigInt(p.graceS)),
     chunks: i32(p.chunks),
     sealed_at_ms: u64(BigInt(p.sealedAtMs))
-  }),
-  chunk: (vaultId, idx, listed = true) => ({ ...base("chunk", vaultId, listed), idx: i32(idx) }),
-  envelope: (vaultId, slot, custodian, listed = true) => ({ ...base("envelope", vaultId, listed), slot: i32(slot), custodian: addr(custodian) }),
-  heartbeat: (vaultId, intervalS, graceS, listed = true) => ({
+  },
+  // Unlisted chunks carry no index: readers order them by matching each payload's hash to the manifest's list.
+  chunk: (vaultId, idx, listed = true) => listed ? { ...base("chunk", vaultId), idx: i32(idx) } : base("chunk", vaultId, false),
+  // The custodian address stays, so a custodian can find its envelopes; the slot comes from the manifest.
+  envelope: (vaultId, slot, custodian, listed = true) => listed ? { ...base("envelope", vaultId), slot: i32(slot), custodian: addr(custodian) } : { ...base("envelope", vaultId, false), custodian: addr(custodian) },
+  heartbeat: (vaultId, intervalS, graceS, listed = true) => !listed ? base("heartbeat", vaultId, false) : {
     ...base("heartbeat", vaultId, listed),
     interval_s: u64(BigInt(intervalS)),
     grace_s: u64(BigInt(graceS))
-  }),
-  ack: (vaultId, slot, listed = true) => ({ ...base("ack", vaultId, listed), slot: i32(slot) }),
+  },
+  ack: (vaultId, slot, listed = true) => listed ? { ...base("ack", vaultId), slot: i32(slot) } : base("ack", vaultId, false),
   /** One per check-in. Its payload carries an encrypted ok/duress flag for each custodian. */
   beat: (vaultId, listed = true) => base("beat", vaultId, listed),
-  release: (vaultId, slot, listed = true) => ({ ...base("release", vaultId, listed), slot: i32(slot) })
+  /**
+   * A release always carries the project tag and the vault's creator, even for an unlisted vault: a vault stays
+   * hidden while it is alive, and becomes findable from the chain alone the moment its evidence is out.
+   */
+  release: (vaultId, slot, vaultCreator) => ({ ...base("release", vaultId, true), slot: i32(slot), vault_creator: addr(vaultCreator) })
 };
 var ReleaseMode = external_exports.enum(["public", "newsroom"]);
 var hex3 = external_exports.string().regex(/^0x[0-9a-fA-F]*$/);
@@ -50000,7 +50009,6 @@ var Manifest = external_exports.object({
 }).refine((m) => m.n === m.custodians.length && m.k <= m.n && m.commitments.length === m.n && m.chunks.hashes.length === m.chunks.count, {
   message: "manifest counts do not agree"
 });
-var isListed = (m) => m.listed !== false;
 var ReleasePayload = external_exports.object({
   v: external_exports.literal(1),
   slot: external_exports.number().int().min(1),
@@ -50531,6 +50539,9 @@ function not(expression) {
 }
 function and(...expressions) {
   return combine2("and", expressions.flat());
+}
+function or(...expressions) {
+  return combine2("or", expressions.flat());
 }
 function combine2(kind, expressions) {
   if (expressions.length === 0) throw new InvalidPredicateError(`${kind}() needs at least one expression. An empty ${kind === "and" ? "conjunction" : "disjunction"} has no query-language spelling \u2014 leave the ${kind}() out, or omit the filter entirely to match everything.`);
@@ -51562,7 +51573,7 @@ async function publishRelease(wallet, reader2, p) {
     {
       payload: jsonToPayload(p.payload),
       contentType: JSON_T,
-      attributes: attrs.release(p.vaultId, p.payload.slot, p.listed ?? true),
+      attributes: attrs.release(p.vaultId, p.payload.slot, p.vaultCreator),
       expires: ExpirationTime.fromDays(p.vaultDays ?? LIFETIME.defaultVaultDays),
       flags: SEALED
     }
@@ -51575,9 +51586,11 @@ var same = (a, b) => a.toLowerCase() === b.toLowerCase();
 var num2 = (r, name) => Number(r.attributes[name]?.value ?? NaN);
 var text = (r, name) => String(r.attributes[name]?.value ?? "");
 var isSealed = (r) => r.creationFlags.readonly && same(r.owner, SEAL_ADDRESS);
-async function loadVault(client, vaultId, creator) {
+async function loadVault(client, vaultId, creator, opts = {}) {
   const rows = [];
-  let page = await client.select(FIELDS).where(eq("vault_id", bytes32(vaultId)), not(eq("type", str("chunk")))).limit(200).fetch();
+  let q = client.select(FIELDS).where(eq("vault_id", bytes32(vaultId)), not(eq("type", str("chunk"))), not(eq("type", str(kindTag(vaultId, "chunk"))))).limit(200);
+  if (opts.atBlock !== void 0) q = q.atBlock(opts.atBlock);
+  let page = await q.fetch();
   rows.push(...page.entities);
   while (page.hasNextPage()) {
     page = await page.next();
@@ -51592,8 +51605,9 @@ var VaultNotFound = class extends Error {
 };
 function assembleVault(rows, vaultId, creator, head) {
   const rejected = [];
-  const reject = (r, reason) => rejected.push({ key: r.key, kind: text(r, "type"), reason });
-  const byType = (t) => rows.filter((r) => text(r, "type") === t);
+  const kind = (r) => kindOf(text(r, "type"), vaultId) ?? text(r, "type");
+  const reject = (r, reason) => rejected.push({ key: r.key, kind: kind(r), reason });
+  const byType = (t) => rows.filter((r) => kind(r) === t);
   const vaultRows = byType("vault").filter((r) => same(r.creator, creator));
   byType("vault").filter((r) => !same(r.creator, creator)).forEach((r) => reject(r, "vault entity from a different creator"));
   if (vaultRows.length === 0) throw new VaultNotFound(vaultId, creator);
@@ -51602,6 +51616,8 @@ function assembleVault(rows, vaultId, creator, head) {
   const manifest = Manifest.parse(JSON.parse(new TextDecoder().decode(v.payload)));
   if (!same(manifest.vault_id, vaultId)) throw new Error("manifest names a different vault id");
   const custodianOf = new Map(manifest.custodians.map((c) => [c.slot, getAddress(c.address)]));
+  const slotOfAddress = (a) => manifest.custodians.find((c) => same(c.address, a))?.slot ?? NaN;
+  const slotOf = (r, fallback) => Number.isFinite(num2(r, "slot")) ? num2(r, "slot") : slotOfAddress(fallback);
   const heartbeats = byType("heartbeat").filter((r) => {
     if (!same(r.creator, creator)) return reject(r, "heartbeat not written by the vault's creator"), false;
     return true;
@@ -51614,11 +51630,12 @@ function assembleVault(rows, vaultId, creator, head) {
   const lastBeat = beats.sort((a, b) => Number(b.createdAt - a.createdAt))[0] ?? null;
   const envelopes = byType("envelope").flatMap((r) => {
     if (!same(r.creator, creator)) return reject(r, "envelope not written by the vault's creator"), [];
-    const slot = num2(r, "slot");
-    return [{ key: r.key, slot, custodian: getAddress(String(r.attributes.custodian?.value)), expiresAt: r.expiresAt, sealed: isSealed(r), payload: r.payload }];
+    const custodian = getAddress(String(r.attributes.custodian?.value));
+    const slot = slotOf(r, custodian);
+    return [{ key: r.key, slot, custodian, expiresAt: r.expiresAt, sealed: isSealed(r), payload: r.payload }];
   });
   const acks = byType("ack").flatMap((r) => {
-    const slot = num2(r, "slot");
+    const slot = slotOf(r, r.creator);
     if (!custodianOf.has(slot) || !same(custodianOf.get(slot), r.creator)) return reject(r, "acknowledgement from a wallet that is not this slot's custodian"), [];
     return [{ key: r.key, slot, custodian: getAddress(r.creator), expiresAt: r.expiresAt }];
   });
@@ -51670,19 +51687,23 @@ function assembleVault(rows, vaultId, creator, head) {
     releases,
     status,
     rejected,
-    sealedKeys: [v, ...byType("envelope").filter((r) => same(r.creator, creator)), ...byType("release").filter((r) => releases.some((x) => x.key === r.key && x.valid))].map((r) => ({ key: r.key, expiresAt: r.expiresAt }))
+    sealedKeys: [v, ...byType("envelope").filter((r) => same(r.creator, creator)), ...byType("release").filter((r) => releases.some((x) => x.key === r.key && x.valid))].map((r) => ({ key: r.key, expiresAt: r.expiresAt, owner: r.owner, permissionless: r.creationFlags.permissionlessExtension }))
   };
 }
 async function loadCiphertext(client, view) {
   const rows = [];
-  let page = await client.select(FIELDS).where(eq("vault_id", bytes32(view.vaultId)), eq("type", str("chunk"))).createdBy(view.creator).limit(50).fetch();
+  let page = await client.select(FIELDS).where(eq("vault_id", bytes32(view.vaultId)), or(eq("type", str("chunk")), eq("type", str(kindTag(view.vaultId, "chunk"))))).createdBy(view.creator).limit(50).fetch();
   rows.push(...page.entities);
   while (page.hasNextPage()) {
     page = await page.next();
     rows.push(...page.entities);
   }
+  const hashes = view.manifest.chunks.hashes;
   const byIdx = /* @__PURE__ */ new Map();
-  for (const r of rows.sort((a, b) => Number(a.createdAt - b.createdAt))) if (!byIdx.has(num2(r, "idx"))) byIdx.set(num2(r, "idx"), r);
+  for (const r of rows.sort((a, b) => Number(a.createdAt - b.createdAt))) {
+    const idx = Number.isFinite(num2(r, "idx")) ? num2(r, "idx") : hashes.indexOf(sha256Hex(r.payload));
+    if (idx >= 0 && !byIdx.has(idx)) byIdx.set(idx, r);
+  }
   const ordered = Array.from({ length: view.manifest.chunks.count }, (_, i) => byIdx.get(i));
   const missing = ordered.flatMap((r, i) => r ? [] : [i]);
   if (missing.length) throw new Error(`missing chunk(s) ${missing.join(", ")}: they may have expired`);
@@ -51690,11 +51711,8 @@ async function loadCiphertext(client, view) {
   return { ciphertext, keys: ordered.map((r) => ({ key: r.key, expiresAt: r.expiresAt })) };
 }
 async function listVaults(client, opts = {}) {
-  const q = async (type) => {
-    const where = opts.creator ? [eq("type", str(type))] : [eq("project", str(PROJECT)), eq("type", str(type))];
-    let b = client.select({ key: true, creator: true, createdAt: true, expiresAt: true, attributes: true }).where(...where);
-    if (opts.creator) b = b.createdBy(opts.creator);
-    let page = await b.limit(opts.limit ?? 200).fetch();
+  const walk3 = async (b) => {
+    let page = await b.fetch();
     const entities = [...page.entities];
     while (page.hasNextPage() && entities.length < 2e3) {
       page = await page.next();
@@ -51702,29 +51720,63 @@ async function listVaults(client, opts = {}) {
     }
     return { entities, blockNumber: page.blockNumber };
   };
-  const [vaults, beats, releases] = await Promise.all([q("vault"), q("heartbeat"), q("release")]);
+  const fields = { key: true, creator: true, createdAt: true, expiresAt: true, attributes: true, payload: true };
+  let all;
+  if (opts.creator) {
+    all = await walk3(client.select(fields).where(eq("$creator", addr(opts.creator))).limit(opts.limit ?? 200));
+  } else {
+    const parts = await Promise.all(["vault", "heartbeat", "release"].map((t) => walk3(client.select(fields).where(eq("project", str(PROJECT)), eq("type", str(t))).limit(opts.limit ?? 200))));
+    all = { entities: parts.flatMap((p) => p.entities), blockNumber: parts[0].blockNumber };
+  }
+  const kindRow = (r) => kindOf(text(r, "type"), text(r, "vault_id"));
   const beatOf = /* @__PURE__ */ new Map();
-  for (const h of beats.entities) {
+  for (const h of all.entities.filter((r) => kindRow(r) === "heartbeat")) {
     const id = `${text(h, "vault_id")}:${h.creator.toLowerCase()}`;
     if ((beatOf.get(id) ?? 0n) < h.expiresAt) beatOf.set(id, h.expiresAt);
   }
   const releaseCount = /* @__PURE__ */ new Map();
-  for (const r of releases.entities) releaseCount.set(text(r, "vault_id"), (releaseCount.get(text(r, "vault_id")) ?? 0) + 1);
+  for (const r of all.entities.filter((r2) => kindRow(r2) === "release")) releaseCount.set(text(r, "vault_id"), (releaseCount.get(text(r, "vault_id")) ?? 0) + 1);
   return {
-    head: vaults.blockNumber,
-    vaults: vaults.entities.map((r) => ({
-      key: r.key,
-      vaultId: text(r, "vault_id"),
-      creator: getAddress(r.creator),
-      k: num2(r, "k"),
-      n: num2(r, "n"),
-      mode: text(r, "mode"),
-      createdAt: r.createdAt,
-      graceS: num2(r, "grace_s"),
-      heartbeatExpiresAt: beatOf.get(`${text(r, "vault_id")}:${r.creator.toLowerCase()}`) ?? null,
-      releases: releaseCount.get(text(r, "vault_id")) ?? 0
-    }))
+    head: all.blockNumber,
+    vaults: all.entities.filter((r) => kindRow(r) === "vault").map((r) => {
+      let m = {};
+      try {
+        m = JSON.parse(new TextDecoder().decode(r.payload));
+      } catch {
+      }
+      return {
+        key: r.key,
+        vaultId: text(r, "vault_id"),
+        creator: getAddress(r.creator),
+        k: Number.isFinite(num2(r, "k")) ? num2(r, "k") : Number(m.k ?? 0),
+        n: Number.isFinite(num2(r, "n")) ? num2(r, "n") : Number(m.n ?? 0),
+        mode: text(r, "mode") || String(m.release?.mode ?? ""),
+        createdAt: r.createdAt,
+        graceS: Number.isFinite(num2(r, "grace_s")) ? num2(r, "grace_s") : Number(m.grace_s ?? 0),
+        heartbeatExpiresAt: beatOf.get(`${text(r, "vault_id")}:${r.creator.toLowerCase()}`) ?? null,
+        releases: releaseCount.get(text(r, "vault_id")) ?? 0
+      };
+    })
   };
+}
+async function listReleased(client) {
+  let page = await client.select({ creator: true, createdAt: true, attributes: true }).where(eq("project", str(PROJECT)), eq("type", str("release"))).limit(200).fetch();
+  const rows = [...page.entities];
+  while (page.hasNextPage() && rows.length < 2e3) {
+    page = await page.next();
+    rows.push(...page.entities);
+  }
+  const by = /* @__PURE__ */ new Map();
+  for (const r of rows) {
+    const creator = r.attributes.vault_creator?.value;
+    if (!creator) continue;
+    const id = `${text(r, "vault_id")}:${creator.toLowerCase()}`;
+    const cur = by.get(id) ?? { vaultId: text(r, "vault_id"), creator: getAddress(creator), pieces: 0, firstBlock: r.createdAt };
+    cur.pieces++;
+    if (r.createdAt < cur.firstBlock) cur.firstBlock = r.createdAt;
+    by.set(id, cur);
+  }
+  return [...by.values()].sort((a, b) => Number(b.firstBlock - a.firstBlock));
 }
 
 // ../packages/core/src/arkiv/events.ts
@@ -51778,7 +51830,7 @@ async function releaseMyShare(wallet, reader2, view, secret) {
   const body = toNewsroom ? encryptTo(hexToBytes2(view.manifest.release.newsroom_pubkey), share) : share;
   return publishRelease(wallet, reader2, {
     vaultId: view.vaultId,
-    listed: isListed(view.manifest),
+    vaultCreator: view.creator,
     payload: { v: 1, slot: seat.slot, share: bytesToHex2(body), sealed_to_newsroom: toNewsroom, observed_lapse_block: view.head.toString() }
   });
 }
@@ -51980,8 +52032,14 @@ async function main() {
       }
       return 0;
     }
+    case "released": {
+      for (const r of await listReleased(reader)) log(`${r.vaultId} ${r.creator} pieces ${r.pieces} first at block ${r.firstBlock}`);
+      return 0;
+    }
     case "status": {
-      const v = await loadVault(reader, vaultId, creator);
+      const at = flag("at");
+      const v = await loadVault(reader, vaultId, creator, at ? { atBlock: BigInt(at) } : {});
+      if (at) log(`as of block ${at}`);
       printVault(v);
       return EXIT[v.status.phase];
     }
@@ -52055,8 +52113,9 @@ async function main() {
     default:
       log(`proof-of-life: dead-hand vaults on Arkiv
 
-  proof-of-life vaults                                   list every vault and its phase
-  proof-of-life status  <vault_id> <creator>             phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released)
+  proof-of-life vaults                                   list listed vaults and their phase
+  proof-of-life released                                 list released evidence, including vaults unlisted while alive
+  proof-of-life status  <vault_id> <creator> [--at N]    phase, deadlines, custodians (exit 0 alive, 1 overdue, 2 lapsed, 3 releasing, 4 released); --at reads it as of block N
   proof-of-life watch   <vault_id> <creator> [--key-file f --auto-release]
   proof-of-life ack     <vault_id> <creator> --key-file f   confirm or renew custody
   proof-of-life release <vault_id> <creator> --key-file f   publish your piece (only after the heartbeat stops)

@@ -115,18 +115,22 @@ describe("keystore v2 blobs", () => {
 });
 
 describe("covert duress signal", () => {
-  it("looks the same either way and only each custodian can read its own flag", async () => {
-    const { beatPayload, readBeat, BEAT_SLOT_BYTES, bytesToHex } = await import("../src/crypto/index.js");
+  it("normal and forced notes look the same; only a custodian holding the envelope tokens can tell them apart", async () => {
+    const { beatPayload, readBeatToken, classifyToken, newBeatTokens, BEAT_SLOT_BYTES, bytesToHex, sealVault, openEnvelopeFull } = await import("../src/crypto/index.js");
     const cs = [custodian(), custodian(), custodian()];
     const pubs = cs.map((c) => bytesToHex(c.pub));
-    const id = bytesToHex(randomBytes(32));
-    const ok = beatPayload(id, pubs, false);
-    const forced = beatPayload(id, pubs, true);
+    const tokens = newBeatTokens();
+    const v = sealVault({ title: "t", note: "", k: 2, files: [{ name: "a", type: "text/plain", bytes: utf8("x") }], custodianPubKeys: cs.map((c) => c.pub), beatTokens: tokens });
+    const ok = beatPayload(v.vaultId, pubs, tokens.ok);
+    const forced = beatPayload(v.vaultId, pubs, tokens.duress);
     expect(ok.length).toBe(forced.length);
     expect(ok.length).toBe(3 * BEAT_SLOT_BYTES);
-    expect(readBeat(id, ok, 2, cs[1].secret)).toBe("ok");
-    expect(readBeat(id, forced, 2, cs[1].secret)).toBe("duress");
-    expect(readBeat(id, forced, 2, cs[0].secret)).toBeNull();
-    expect(readBeat(bytesToHex(randomBytes(32)), forced, 2, cs[1].secret)).toBeNull();
+    const env = openEnvelopeFull(v.vaultId, 2, v.envelopes[1], cs[1].secret, v.commitments[1]);
+    expect(env.share).toEqual(v.shares[1]);
+    expect(classifyToken(readBeatToken(v.vaultId, ok, 2, cs[1].secret), env.tokens)).toBe("ok");
+    expect(classifyToken(readBeatToken(v.vaultId, forced, 2, cs[1].secret), env.tokens)).toBe("duress");
+    expect(readBeatToken(v.vaultId, forced, 2, cs[0].secret)).toBeNull();
+    // A note with a token the custodian never received means nothing.
+    expect(classifyToken(readBeatToken(v.vaultId, beatPayload(v.vaultId, pubs, randomBytes(16)), 2, cs[1].secret), env.tokens)).toBeNull();
   });
 });

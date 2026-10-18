@@ -1,35 +1,40 @@
-// The covert duress signal. Every check-in carries one "beat" payload: for each custodian slot, a fixed-size
-// envelope holding either OK or DURESS plus random padding, encrypted to that custodian's key. A normal check-in and
-// a forced one produce payloads of identical length and shape, so nobody watching the chain can tell them apart.
-import { concat, hexToBytes, randomBytes, utf8, type Hex } from "./bytes.js";
+// The covert duress signal. Each activist key has two random 16-byte tokens, one meaning "ok" and one meaning
+// "duress". Both go to every custodian inside their sealed envelope. Each check-in writes one token, encrypted to
+// each custodian, into a fixed-size note. A normal and a forced check-in look identical on chain, and the token on
+// the activist's phone is just random bytes: only a custodian, comparing it with its envelope, can tell which it is.
+import { concat, equalBytes, hexToBytes, randomBytes, utf8, type Hex } from "./bytes.js";
 import { decryptWith, encryptTo } from "./ecies.js";
 
-const OK = 0x00;
-const DURESS = 0xd5;
-const PLAIN = 16; // one flag byte + 15 random bytes
-/** 33-byte ephemeral key + 12-byte nonce + 16 plaintext + 16-byte tag. */
-export const BEAT_SLOT_BYTES = 33 + 12 + PLAIN + 16;
+export const TOKEN_BYTES = 16;
+/** 33-byte ephemeral key + 12-byte nonce + 16-byte token + 16-byte tag. */
+export const BEAT_SLOT_BYTES = 33 + 12 + TOKEN_BYTES + 16;
+
+export type BeatTokens = { ok: Uint8Array; duress: Uint8Array };
+export const newBeatTokens = (): BeatTokens => ({ ok: randomBytes(TOKEN_BYTES), duress: randomBytes(TOKEN_BYTES) });
 
 const aad = (vaultId: Hex, slot: number) => concat(utf8("proof-of-life/beat/v1"), hexToBytes(vaultId), new Uint8Array([slot]));
 
-export function beatPayload(vaultId: Hex, custodianPubkeys: Hex[], duress: boolean): Uint8Array {
-  return concat(
-    ...custodianPubkeys.map((pub, i) => {
-      const plain = randomBytes(PLAIN);
-      plain[0] = duress ? DURESS : OK;
-      return encryptTo(hexToBytes(pub), plain, aad(vaultId, i + 1));
-    }),
-  );
+/** The note written with a check-in: `token` encrypted to each custodian in slot order. */
+export function beatPayload(vaultId: Hex, custodianPubkeys: Hex[], token: Uint8Array): Uint8Array {
+  if (token.length !== TOKEN_BYTES) throw new RangeError("beat token must be 16 bytes");
+  return concat(...custodianPubkeys.map((pub, i) => encryptTo(hexToBytes(pub), token, aad(vaultId, i + 1))));
 }
 
-/** A custodian reads its own slot. Returns null if the payload is malformed or not for this key. */
-export function readBeat(vaultId: Hex, payload: Uint8Array, slot: number, custodianSecret: Uint8Array): "ok" | "duress" | null {
+/** A custodian decrypts its own slot of a note. Returns null if malformed or not for this key. */
+export function readBeatToken(vaultId: Hex, payload: Uint8Array, slot: number, custodianSecret: Uint8Array): Uint8Array | null {
   const start = (slot - 1) * BEAT_SLOT_BYTES;
   if (payload.length < start + BEAT_SLOT_BYTES) return null;
   try {
-    const plain = decryptWith(custodianSecret, payload.subarray(start, start + BEAT_SLOT_BYTES), aad(vaultId, slot));
-    return plain[0] === DURESS ? "duress" : plain[0] === OK ? "ok" : null;
+    return decryptWith(custodianSecret, payload.subarray(start, start + BEAT_SLOT_BYTES), aad(vaultId, slot));
   } catch {
     return null;
   }
+}
+
+/** Classifies a token against the pair the custodian received in its envelope. */
+export function classifyToken(token: Uint8Array | null, tokens: BeatTokens | null): "ok" | "duress" | null {
+  if (!token || !tokens) return null;
+  if (equalBytes(token, tokens.duress)) return "duress";
+  if (equalBytes(token, tokens.ok)) return "ok";
+  return null;
 }

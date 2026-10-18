@@ -75,7 +75,7 @@ if (v.status.phase !== "released") {
   const fw = walletClient(forger, { rpc });
   const fakeRelease = await fw.createEntity({
     payload: jsonToPayload({ v: 1, slot: 2, share: "0x02" + "ab".repeat(32), sealed_to_newsroom: false, observed_lapse_block: "0" }),
-    contentType: "application/json", attributes: attrs.release(rel.vaultId, 2), expires: ExpirationTime.fromDays(30),
+    contentType: "application/json", attributes: attrs.release(rel.vaultId, 2, rel.creator), expires: ExpirationTime.fromDays(30),
   });
   const fakeBeat = await fw.createEntity({
     payload: new Uint8Array(), contentType: "application/octet-stream",

@@ -5,7 +5,7 @@ import { tiramisu } from "@arkiv-network/sdk/chains";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "viem";
 import {
-  ackCustody, beatPayload, checkIn, compressPublicKey, createVault, duressSignal, loadVault, publicClient, releaseMyShare, sealVault, utf8, walletClient,
+  ackCustody, beatPayload, checkIn, newBeatTokens, compressPublicKey, createVault, duressSignal, loadVault, publicClient, releaseMyShare, sealVault, utf8, walletClient,
 } from "@proof-of-life/core";
 import { account, INDEX, rpc } from "./env.js";
 
@@ -18,10 +18,11 @@ const publisher = createWalletClient({ chain: tiramisu, transport: http(rpc), ac
 for (const to of [activist.address, ...cs.map((c) => c.address)]) await reader.waitForTransactionReceipt({ hash: await publisher.sendTransaction({ to, value: parseEther("0.03") }) });
 
 const pubs = cs.map((c) => bytesToHex(pub(c.secret)) as Hex);
-const sealed = sealVault({ title: "duress test", note: "synthetic", k: 2, custodianPubKeys: cs.map((c) => pub(c.secret)), files: [{ name: "a.txt", type: "text/plain", bytes: utf8("synthetic") }] });
+const tokens = newBeatTokens();
+const sealed = sealVault({ title: "duress test", note: "synthetic", k: 2, custodianPubKeys: cs.map((c) => pub(c.secret)), files: [{ name: "a.txt", type: "text/plain", bytes: utf8("synthetic") }], beatTokens: tokens });
 const res = await createVault(walletClient(activist, { rpc }), reader, { sealed, k: 2, intervalS: 3600, graceS: 3600, mode: "public", listed: true, vaultDays: 30, custodians: cs.map((c, i) => ({ address: c.address, pubkey: pubs[i] })) });
 const w = walletClient(activist, { rpc });
-const beat = (duress: boolean) => ({ vaultId: sealed.vaultId, payload: beatPayload(sealed.vaultId, pubs, duress) });
+const beat = (duress: boolean) => ({ vaultId: sealed.vaultId, payload: beatPayload(sealed.vaultId, pubs, duress ? tokens.duress : tokens.ok) });
 
 const normal = await checkIn(w, { heartbeatKey: res.heartbeatKey, intervalS: 3600, graceS: 3600, beat: beat(false) });
 let v = await loadVault(reader, sealed.vaultId, activist.address);

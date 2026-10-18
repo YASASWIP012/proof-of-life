@@ -60,7 +60,11 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
   const expires = ExpirationTime.fromDays(vaultDays);
   const perTx = Math.max(1, input.chunksPerTx ?? 1);
   const listed = input.listed ?? false;
-  const SEAL = { readonly: true, permissionlessExtension: input.keepAliveByAnyone ?? true } as const;
+  const anyoneKeeps = input.keepAliveByAnyone ?? true;
+  const SEAL = { readonly: true, permissionlessExtension: anyoneKeeps } as const;
+  // With anyone-may-extend off, the activist keeps ownership so it alone can extend, or let the data expire.
+  // Handing it to 0x…dEaD as well would leave entities nobody can ever extend, and a check-in that tried would revert.
+  const keepAll = (n: number) => (anyoneKeeps ? new Set<number>() : new Set(Array.from({ length: n }, (_, i) => i)));
   const txs: Hex[] = [];
 
   // 1. Ciphertext first. Chunks without a manifest are inert, so a failed upload exposes nothing.
@@ -70,6 +74,7 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
       wallet,
       reader,
       slice.map((bytes, j) => ({ payload: bytes, contentType: BIN, attributes: attrs.chunk(sealed.vaultId, i + j, listed), expires, flags: SEAL })),
+      keepAll(slice.length),
     );
     txs.push(r.txHash);
     onProgress({ stage: "chunks", done: Math.min(i + perTx, sealed.chunks.length), total: sealed.chunks.length, txHash: r.txHash });
@@ -115,7 +120,7 @@ export async function createVault(wallet: WalletClient, reader: PublicClient, in
       flags: { readonly: true, permissionlessExtension: false },
     },
   ];
-  const r = await sealedBatch(wallet, reader, creates, new Set([creates.length - 1]));
+  const r = await sealedBatch(wallet, reader, creates, anyoneKeeps ? new Set([creates.length - 1]) : keepAll(creates.length));
   txs.push(r.txHash);
   onProgress({ stage: "done", done: 1, total: 1, txHash: r.txHash });
   return { vaultKey: r.createdEntities[0], heartbeatKey: r.createdEntities[creates.length - 1], txs, manifest };
@@ -160,12 +165,12 @@ export async function ackCustody(wallet: WalletClient, p: { vaultId: Hex; slot: 
   });
 }
 
-export async function publishRelease(wallet: WalletClient, reader: PublicClient, p: { vaultId: Hex; payload: ReleasePayload; vaultDays?: number; listed?: boolean }) {
+export async function publishRelease(wallet: WalletClient, reader: PublicClient, p: { vaultId: Hex; vaultCreator: Hex; payload: ReleasePayload; vaultDays?: number }) {
   return sealedBatch(wallet, reader, [
     {
       payload: jsonToPayload(p.payload),
       contentType: JSON_T,
-      attributes: attrs.release(p.vaultId, p.payload.slot, p.listed ?? true),
+      attributes: attrs.release(p.vaultId, p.payload.slot, p.vaultCreator),
       expires: ExpirationTime.fromDays(p.vaultDays ?? LIFETIME.defaultVaultDays),
       flags: SEALED,
     },

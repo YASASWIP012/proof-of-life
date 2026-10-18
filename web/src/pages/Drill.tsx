@@ -15,7 +15,7 @@ import { newSecret } from "../lib/keys";
 import { read, readClient } from "../lib/net";
 import { syntheticRtiReply } from "../lib/synthetic";
 import { ensureGas } from "../lib/tap";
-import { attrs, beatPayload, checkIn, hexToBytes, vaultStatus } from "@proof-of-life/core";
+import { attrs, beatPayload, checkIn, hexToBytes, newBeatTokens, vaultStatus } from "@proof-of-life/core";
 import { ExpirationTime, jsonToPayload } from "@arkiv-network/sdk";
 
 type Actor = ReturnType<typeof newSecret> & { name: string; wallet: WalletClient };
@@ -37,6 +37,7 @@ export default function Drill() {
   const actors = useRef<{ activist: Actor; custodians: Actor[]; forger: Actor } | null>(null);
   const vaultRef = useRef<{ vaultId: Hex; creator: Hex; heartbeatKey: Hex } | null>(null);
   const released = useRef(false);
+  const tokens = useRef(newBeatTokens());
 
   const add = (l: Omit<Log, "t">) => setLog((xs) => [...xs, { ...l, t: Date.now() }]);
 
@@ -72,6 +73,7 @@ export default function Drill() {
       }
       await new Promise((r) => setTimeout(r, 4000));
 
+      tokens.current = newBeatTokens();
       const doc = syntheticRtiReply();
       const sealed = sealVault({
         title: "Village A-17 road works (synthetic)",
@@ -82,6 +84,7 @@ export default function Drill() {
         ],
         k: 2,
         custodianPubKeys: custodians.map((c) => hexToBytes(c.pubkey)),
+        beatTokens: tokens.current,
       });
       add({ text: `Encrypted 2 files in the browser. Key split 2-of-3. Vault ${short(sealed.vaultId)}.` });
 
@@ -108,7 +111,7 @@ export default function Drill() {
     const v = vaultRef.current!;
     setBusy(true);
     try {
-      const beat = { vaultId: v.vaultId, payload: beatPayload(v.vaultId, a.custodians.map((c) => c.pubkey), false) };
+      const beat = { vaultId: v.vaultId, payload: beatPayload(v.vaultId, a.custodians.map((c) => c.pubkey), tokens.current.ok) };
       const r = await checkIn(a.activist.wallet, { heartbeatKey: v.heartbeatKey, intervalS: INTERVAL, graceS: GRACE, beat });
       add({ text: "Activist checked in", tx: r.txHash, tone: "ok" });
       await refresh();
@@ -150,7 +153,7 @@ export default function Drill() {
             const fake = await a.forger.wallet.createEntity({
               payload: jsonToPayload({ v: 1, slot: 2, share: "0x02" + "ab".repeat(32), sealed_to_newsroom: false, observed_lapse_block: "0" }),
               contentType: "application/json",
-              attributes: attrs.release(v.vaultId, 2),
+              attributes: attrs.release(v.vaultId, 2, v.creator),
               expires: ExpirationTime.fromDays(1),
             });
             add({ text: "A forger published a fake piece for slot 2", tx: fake.txHash, tone: "bad" });
