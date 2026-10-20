@@ -14,6 +14,7 @@ import { en, type Strings } from "../lib/strings.en";
 import { hi } from "../lib/strings.hi";
 import { te } from "../lib/strings.te";
 import { ensureGas } from "../lib/tap";
+import { BACKLOG_PENDING, BACKLOG_SOURCE, COMMISSIONS } from "../lib/backlog";
 
 const ACT_URL = "https://indiacode.gov.in/act/6fa557d9-5620-4002-ba6c-aef1ee6daca0/sections";
 const DICTS: Record<Lang, Partial<Strings>> = { en, hi, te };
@@ -234,6 +235,8 @@ export default function Rti() {
         </Card>
       </div>
 
+      <Backlog />
+
       <Card className="space-y-4">
         <h2 className="t-title">{t("rti_rec_t")}</h2>
         <p className="max-w-[760px] text-[14.5px] leading-relaxed text-ink-2">{t("rti_rec_lead")}</p>
@@ -299,6 +302,51 @@ export default function Rti() {
 
       {clock && <Letter clock={clock} overdue={overdue} receivedMs={receivedMs} withTime={withTime} now={now} record={rec && view ? { block: rec.createdAt, ms: view.createdMs ?? 0, link } : null} />}
     </div>
+  );
+}
+
+/** The Second Appeal's real-world wait, by commission, from the SNS report card. Nothing here is guessed. */
+function Backlog() {
+  const { t } = useI18n();
+  const [id, setId] = useState(() => {
+    try {
+      return localStorage.getItem("pol.rti.commission") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const pick = (v: string) => {
+    setId(v);
+    try {
+      localStorage.setItem("pol.rti.commission", v);
+    } catch {}
+  };
+  const c = COMMISSIONS.find((x) => x.id === id);
+  const wait = c?.wait ? (c.wait.m ? t("rti_bk_years_months", { y: c.wait.y, m: c.wait.m }) : t("rti_bk_years", { y: c.wait.y })) : null;
+  return (
+    <Card className="space-y-4">
+      <h2 className="t-title">{t("rti_bk_t")}</h2>
+      <p className="max-w-[760px] text-[14.5px] leading-relaxed text-ink-2">{t("rti_bk_lead")}</p>
+      <Field label={t("rti_bk_pick")}>
+        <select className={`${inputCls} max-w-[460px]`} value={id} onChange={(e) => pick(e.target.value)}>
+          <option value="">{t("rti_bk_choose")}</option>
+          {COMMISSIONS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </select>
+      </Field>
+      {c && (
+        <ul className="space-y-2 text-[14.5px] leading-relaxed">
+          {wait && <li className="font-semibold" style={{ color: c.wait!.y >= 5 ? "var(--lapsed)" : "var(--ink)" }}>{t("rti_bk_wait", { wait })}</li>}
+          {c.defunct && <li style={{ color: "var(--lapsed)" }}>{t("rti_bk_defunct")}</li>}
+          {c.noChief && <li>{t("rti_bk_nochief")}</li>}
+          {c.reduced && <li>{t("rti_bk_reduced")}</li>}
+          {!wait && !c.defunct && !c.noChief && !c.reduced && <li className="text-muted">{t("rti_bk_none")}</li>}
+        </ul>
+      )}
+      <p className="text-[14px] leading-relaxed text-ink-2">{t("rti_bk_all", { n: BACKLOG_PENDING })}</p>
+      <p className="text-[13px] leading-snug text-muted">
+        <a className="underline decoration-dotted underline-offset-2 hover:text-ink" href={BACKLOG_SOURCE} target="_blank" rel="noreferrer">{t("rti_bk_src")}</a>
+      </p>
+    </Card>
   );
 }
 

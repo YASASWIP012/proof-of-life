@@ -1,10 +1,12 @@
 # Proof of Life · धड़कन
 
-**If my heartbeat stops, the truth comes out.**
+**For India's RTI filers: know your deadlines today, and protect your evidence if the work turns dangerous.**
 
-A dead-hand vault for India's RTI activists, whistleblowers and the journalists and lawyers who stand with them. Seal your documents and check in with one tap. If you stop, the people you chose can open them, and the record they open cannot be deleted by you, by us, or by whoever comes for you.
+The Union government told the Rajya Sabha that **17,50,863 RTI applications** were filed in 2023-24 ([ETV Bharat](https://www.etvbharat.com/en/bharat/right-to-information-applications-filed-during-2023-to-24-centre-enn25120405545)). When a Public Information Officer misses the 30-day deadline, the filer has to know the date, treat the silence as a refusal, and file a First Appeal in time. Second appeals then wait: **4,13,972 appeals and complaints were pending** across India's 29 information commissions on 30 June 2025, and a matter filed with the Telangana commission on 1 July 2025 has an estimated wait of **29 years and 2 months** ([Satark Nagrik Sangathan, report card 2024-25](https://www.snsindia.org/wp-content/uploads/2025/10/Press-Release-2025.pdf)). Miss a window and the request is lost.
 
-If you have filed an RTI application, the [RTI clock](https://proof-of-life-khaki.vercel.app/#/rti) works for you today: it gives your reply deadline and appeal dates under the RTI Act, drafts the First Appeal in English, Hindi or Telugu, and puts nothing sensitive on chain.
+**The [RTI clock](https://proof-of-life-khaki.vercel.app/#/rti) works on a real application today.** Enter the date the PIO received it, and it gives the reply deadline (section 7(1)), the date silence counts as refusal (7(2)), the First Appeal window (19(1)), the date the First Appellate Authority must decide (19(6)) and the Second Appeal window (19(3)), shows the backlog at your state's information commission, and drafts the First Appeal in English, हिन्दी or తెలుగు. What you type stays in your browser. If you choose to record the application, Arkiv gets only a salted commitment that reveals nothing about it or you.
+
+**For the few whose RTI work puts them in danger, the vault is the next layer.** CHRI counts at least 107 RTI users murdered since 2005. Seal your documents and check in with one tap. If you stop, the custodians you chose can open them, and nobody can delete the record: not you, not us, not whoever comes for you. The vault runs on Arkiv's testnet, so for now it is a working rehearsal.
 
 Built on [Arkiv](https://arkiv.network), the Web3 database, for **Arkiv: Global Tour Stop** (9 to 18 October 2026). Tracks: **Best Indian Use Case**, **Censorship Resistance**, **Privacy**, **Security**, **Open Source**.
 
