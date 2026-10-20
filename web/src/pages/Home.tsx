@@ -53,15 +53,8 @@ export default function Home() {
             <Link to="/drill" className="btn btn-outline btn-lg">{t("hero_cta_drill")}</Link>
           </div>
           <p className="trust"><span>{t("trust_1")}</span><span>{t("trust_2")}</span><span>English · हिन्दी · తెలుగు</span></p>
-          <div className="hero__visual bleed">
-            <div className="stage"><HeroVisual /></div>
-          </div>
-        </div>
-      </section>
-
-      <section className="section section--alt after-bleed">
-        <div className="container">
-          <div className="card flex flex-col gap-6">
+          <div className="mt-12" style={{ width: "min(100% - 2 * var(--gutter), var(--container))", marginInline: "auto" }}>
+          <div className="card flex flex-col gap-6 text-left">
             <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
               <div className="max-w-[640px]">
                 <Eyebrow dot>{t("home_rti_eyebrow")}</Eyebrow>
@@ -83,11 +76,15 @@ export default function Home() {
               <a className="underline" href="https://www.snsindia.org/wp-content/uploads/2025/10/Press-Release-2025.pdf" target="_blank" rel="noreferrer">Satark Nagrik Sangathan report card 2024-25</a>
             </p>
           </div>
-          <p className="t-small mt-6 text-center">{t("home_rti_next")}</p>
+          </div>
+          <p className="t-small mt-10">{t("home_rti_next")}</p>
+          <div className="hero__visual bleed">
+            <div className="stage"><HeroVisual /></div>
+          </div>
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section--alt after-bleed">
         <div className="container">
           <div className="section-head">
             <Eyebrow>{t("why_title")}</Eyebrow>
@@ -110,7 +107,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section section--alt">
+      <section className="section">
         <div className="container">
           <div className="grid grid-2">
             <div className="card card--flat">
@@ -131,7 +128,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section--alt">
         <div className="container stack">
           <Feature eyebrow={t("how_1_t")} icon={ICONS.lock} title={t("f1_title")} body={t("how_1")} chips={["AES-256-GCM", t("f1_chip_2"), "0x…dEaD"]}>
             <SealVisual />
@@ -148,7 +145,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section section--alt" id="try">
+      <section className="section" id="try">
         <div className="container">
           <div className="section-head">
             <Eyebrow dot>{t("try_eyebrow")}</Eyebrow>
@@ -159,7 +156,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section--alt">
         <div className="container">
           <div className="section-head">
             <Eyebrow>{t("arkiv_eyebrow")}</Eyebrow>
@@ -179,7 +176,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section section--alt">
+      <section className="section">
         <div className="container">
           <div className="section-head">
             <Eyebrow>{t("faq_eyebrow")}</Eyebrow>
@@ -196,7 +193,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section section--alt">
         <div className="container text-center">
           <div className="mx-auto mb-7 w-fit rounded-[22%] shadow-[var(--shadow-2)]"><AppIcon size={88} /></div>
           <h2 className="mx-auto max-w-[760px]">{t("final_a")} <span className="t-muted">{t("final_b")}</span></h2>

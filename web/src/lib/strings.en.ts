@@ -9,7 +9,7 @@ export const en = {
 
   hero_kicker: "For RTI activists, whistleblowers and the people who stand with them",
   hero_title: "If my heartbeat stops, the truth comes out.",
-  hero_body: "Seal your documents and check in with one tap. If you stop, the people you chose can open them. The record they open can't be deleted by you, by us, or by whoever comes for you.",
+  hero_body: "For India's RTI filers: know your reply deadline and appeal dates today, and if the work turns dangerous, seal your evidence so that silencing you releases it.",
   hero_cta_drill: "Watch it happen in 5 minutes",
   hero_cta_new: "Seal a real vault",
   hero_note: "Runs on Arkiv's Tiramisu testnet. Use test documents only.",
