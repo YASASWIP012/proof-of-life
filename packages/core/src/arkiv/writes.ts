@@ -5,7 +5,7 @@ import { bytesToHex } from "../crypto/bytes.js";
 import type { SealedVault } from "../crypto/vault.js";
 import type { PublicClient, WalletClient } from "./client.js";
 import { attrs, BLOCK_SECONDS, evenSeconds, LIFETIME, Manifest, SEAL_ADDRESS, sealOwner, type ReleaseMode, type ReleasePayload } from "./schema.js";
-import { rtiAttrs, rtiExpiryBlock, rtiSealOwner, type RtiPayload } from "./rti.js";
+import { rtiAttrs, rtiExpiryBlock, rtiSealOwner, type RtiPayload, rtiTallyAttrs } from "./rti.js";
 
 const SEALED = { readonly: true, permissionlessExtension: true } as const;
 const BIN = "application/octet-stream";
@@ -196,7 +196,7 @@ export async function keepAlive(wallet: WalletClient, keys: Hex[], days: number 
  * (rtiExpiryBlock), and is handed to the record's own seal address in the same transaction, so nobody can change,
  * extend or delete it.
  */
-export async function recordRti(wallet: WalletClient, reader: PublicClient, p: { commitment: Hex; dueMs: number; nowMs?: number }) {
+export async function recordRti(wallet: WalletClient, reader: PublicClient, p: { commitment: Hex; dueMs: number; nowMs?: number; commission?: string }) {
   const head = await reader.getBlockNumber();
   const dueBlock = head + BigInt(Math.ceil((p.dueMs - (p.nowMs ?? Date.now())) / 1000 / BLOCK_SECONDS));
   if (dueBlock <= head + 30n) throw new Error("the reply deadline has passed, so there is nothing left to time");
@@ -204,7 +204,11 @@ export async function recordRti(wallet: WalletClient, reader: PublicClient, p: {
   const r = await sealedBatch(
     wallet,
     reader,
-    [{ payload: jsonToPayload(payload), contentType: JSON_T, attributes: rtiAttrs(p.commitment), expires: ExpirationTime.atBlock(rtiExpiryBlock(dueBlock)), flags: { readonly: true, permissionlessExtension: false } }],
+    [
+      { payload: jsonToPayload(payload), contentType: JSON_T, attributes: rtiAttrs(p.commitment), expires: ExpirationTime.atBlock(rtiExpiryBlock(dueBlock)), flags: { readonly: true, permissionlessExtension: false } },
+      // The opt-in public count rides in the same batch, sealed the same way, and lives as long as the record.
+      ...(p.commission ? [{ payload: new Uint8Array(), contentType: BIN, attributes: rtiTallyAttrs(p.commission, dueBlock), expires: ExpirationTime.atBlock(rtiExpiryBlock(dueBlock)), flags: { readonly: true, permissionlessExtension: false } }] : []),
+    ],
     new Set(),
     rtiSealOwner(p.commitment),
   );

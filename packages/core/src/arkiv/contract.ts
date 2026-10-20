@@ -97,6 +97,19 @@ export function dataContract() {
         owner: 'the record\'s own seal address: last 20 bytes of sha256("proof-of-life/rti-seal/v2" ‖ commitment)',
         lifetime: "until due_block + 165 days: the First Appeal (s.19(1)), its decision (s.19(6)) and the second appeal (s.19(3))",
       },
+      rti_tally: {
+        writer: "the same one-time key, in the same batch as an rti record, only if the filer opts in to the public count",
+        attributes: {
+          project: { type: "str", value: PROJECT, description: "always" },
+          type: { type: "str", value: "rti_tally", description: "always" },
+          ic: { type: "str", description: "the information commission a Second Appeal would go to: cic, or a two- or three-letter state code from the app's list" },
+          due_block: { type: "u64", description: "block by which the PIO must reply; overdue when due_block < head" },
+        },
+        payload: { contentType: "application/octet-stream", schema: "empty" },
+        flags: { readonly: true, permissionlessExtension: false },
+        owner: "the record's own seal address, as for rti",
+        lifetime: "the same as its rti record",
+      },
     },
     $defs: {
       Manifest: z.toJSONSchema(Manifest, { target: "draft-2020-12" }),

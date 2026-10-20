@@ -1,6 +1,6 @@
 // Reading a vault. Trust never comes from an attribute: every entity is checked against its on-chain $creator.
 import { bytes32, str, u64, addr as addrAttr } from "@arkiv-network/sdk/attr";
-import { eq, gte, lte, not } from "@arkiv-network/sdk/query";
+import { eq, gte, lt, lte, not } from "@arkiv-network/sdk/query";
 import type { Hex } from "viem";
 import { getAddress } from "viem";
 import { hexToBytes } from "../crypto/bytes.js";
@@ -11,7 +11,7 @@ import { sha256Hex } from "../crypto/vault.js";
 import { or } from "@arkiv-network/sdk/query";
 import { BLOCK_SECONDS } from "./schema.js";
 import { vaultStatus, type Status } from "./status.js";
-import { assembleRti, rtiTag, type RtiRecord, type RtiRow } from "./rti.js";
+import { assembleRti, RTI_TALLY, rtiTag, type RtiRecord, type RtiRow } from "./rti.js";
 
 const FIELDS = { key: true, owner: true, creator: true, createdAt: true, expiresAt: true, creationFlags: true, attributes: true, payload: true } as const;
 
@@ -411,4 +411,24 @@ export async function loadRti(client: PublicClient, commitment: Hex, opts: { atB
   const block = await client.getBlock({ blockNumber: record.createdAt });
   const createdMs = Number(block.timestamp) * 1000;
   return { record, rejected, head, duePassed: record.dueBlock <= head, expired: record.expiresAt <= head, createdMs, dueMs: createdMs + Number(record.dueBlock - record.createdAt) * BLOCK_SECONDS * 1000 };
+}
+
+export type RtiTally = { commission: string; head: bigint; recorded: number; overdue: number };
+
+/**
+ * The public count for one information commission: applications recorded with the RTI clock whose filers chose to be
+ * counted, and how many of them are past their reply deadline (`due_block < head`, a range the node evaluates). Only
+ * sealed rows count: read-only and owned by an address other than their writer. Anyone can add a row, so the count is
+ * a signal from filers, not an audit of the commission.
+ */
+export async function rtiTally(client: PublicClient, commission: string): Promise<RtiTally> {
+  const head = await client.getBlockNumber();
+  const base = [eq("project", str(PROJECT)), eq("type", str(RTI_TALLY)), eq("ic", str(commission))];
+  const fields = { key: true, owner: true, creator: true, creationFlags: true } as const;
+  const sealedOnly = (rows: Row[]) => rows.filter((r) => r.creationFlags.readonly && !same(r.owner, r.creator)).length;
+  const [all, late] = await Promise.all([
+    fetchAll(client.select(fields).where(...base).limit(200) as unknown as Pageable, { atBlock: head, max: 5000 }),
+    fetchAll(client.select(fields).where(...base, lt("due_block", u64(head))).limit(200) as unknown as Pageable, { atBlock: head, max: 5000 }),
+  ]);
+  return { commission, head, recorded: sealedOnly(all.rows), overdue: sealedOnly(late.rows) };
 }

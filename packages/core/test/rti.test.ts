@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assembleRti, bytesToHex, checkRtiReceipt, RTI_APPEAL_DAYS, rtiExpiryBlock, randomBytes, rtiClock, rtiCommitment, rtiSealOwner, rtiTag, sha256Hex, utf8, type RtiReceipt, type RtiRow } from "../src/index.js";
+import { rtiTallyAttrs, assembleRti, bytesToHex, checkRtiReceipt, RTI_APPEAL_DAYS, rtiExpiryBlock, randomBytes, rtiClock, rtiCommitment, rtiSealOwner, rtiTag, sha256Hex, utf8, type RtiReceipt, type RtiRow } from "../src/index.js";
 
 const jsonPayload = (v: unknown) => utf8(JSON.stringify(v));
 
@@ -96,5 +96,18 @@ describe("RTI record", () => {
     const { record, rejected } = assembleRti(rows, commitment);
     expect(record).toBeNull();
     expect(rejected).toHaveLength(6);
+  });
+});
+
+describe("rtiTallyAttrs", () => {
+  it("names only the commission and the due block, under the project tag", () => {
+    const a = rtiTallyAttrs("tg", 123n) as Record<string, { value: unknown }>;
+    expect(Object.keys(a).sort()).toEqual(["due_block", "ic", "project", "type"]);
+    expect(a.ic.value).toBe("tg");
+    expect(a.type.value).toBe("rti_tally");
+  });
+  it("refuses anything that is not a commission id", () => {
+    expect(() => rtiTallyAttrs("Telangana commission", 1n)).toThrow();
+    expect(() => rtiTallyAttrs("", 1n)).toThrow();
   });
 });

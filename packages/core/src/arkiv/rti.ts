@@ -1,12 +1,12 @@
 // The RTI clock: statutory deadlines for an RTI application, and the one entity that timestamps it on Arkiv.
 // Periods follow the Right to Information Act, 2005 as published on India Code (indiacode.gov.in). Mirrored in /arkiv/schema.md.
-import { str } from "@arkiv-network/sdk/attr";
+import { str, u64 } from "@arkiv-network/sdk/attr";
 import { z } from "zod";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, concat, hexToBytes, utf8 } from "../crypto/bytes.js";
 import type { AttributeInputs } from "@arkiv-network/sdk";
 import type { Hex } from "../crypto/bytes.js";
-import { BLOCK_SECONDS } from "./schema.js";
+import { BLOCK_SECONDS, PROJECT } from "./schema.js";
 
 export type RtiKind = "normal" | "life";
 
@@ -86,6 +86,19 @@ export function rtiSealOwner(commitment: Hex): Hex {
 }
 
 export const rtiAttrs = (commitment: Hex): AttributeInputs => ({ type: str(rtiTag(commitment)) });
+
+/**
+ * Opt-in, and separate from the record: one row per recorded application that names only the information commission
+ * a Second Appeal would go to (`ic`, an id from the app's list) and the reply's due block. It carries no payload and
+ * no link to the filer, so the public can count applications per commission and, with a range on `due_block`, how
+ * many are past their reply deadline. Sealed with the record, so nobody can remove a count once it is in.
+ */
+export const RTI_TALLY = "rti_tally";
+export const RTI_COMMISSION = /^[a-z]{2,3}$/;
+export const rtiTallyAttrs = (commission: string, dueBlock: bigint): AttributeInputs => {
+  if (!RTI_COMMISSION.test(commission)) throw new Error("unknown information commission");
+  return { project: str(PROJECT), type: str(RTI_TALLY), ic: str(commission), due_block: u64(dueBlock) };
+};
 
 const hex32 = z.string().regex(/^0x[0-9a-f]{64}$/);
 

@@ -1,6 +1,6 @@
 // The RTI clock: deadlines and a drafted First Appeal for a real RTI application, worked out in the browser.
 // The only thing that can leave the device is a salted commitment to the application, and only if the filer records it.
-import { bytesToHex, checkRtiReceipt, explorerAddress, loadRti, randomBytes, recordRti, rtiClock, rtiCommitment, RtiReceipt, sha256Hex, utf8, walletClient, type RtiKind, type RtiView } from "@proof-of-life/core";
+import { bytesToHex, checkRtiReceipt, explorerAddress, loadRti, randomBytes, recordRti, rtiClock, rtiCommitment, RtiReceipt, rtiTally, sha256Hex, utf8, walletClient, type RtiKind, type RtiTally, type RtiView } from "@proof-of-life/core";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { Hex } from "viem";
@@ -51,6 +51,21 @@ export default function Rti() {
   const [tx, setTx] = useState<Hex | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [ic, setIc] = useState(() => {
+    try {
+      return localStorage.getItem("pol.rti.commission") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const pickIc = (v: string) => {
+    setIc(v);
+    try {
+      localStorage.setItem("pol.rti.commission", v);
+    } catch {}
+  };
+  const [countMe, setCountMe] = useState(false);
+  const [tallyTick, setTallyTick] = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
@@ -159,7 +174,8 @@ export default function Rti() {
       setStep("gas");
       await ensureGas(key.account.address);
       setStep("write");
-      const r = await recordRti(walletClient(key.account), readClient(), { commitment: c, dueMs: clock.replyDueMs });
+      const r = await recordRti(walletClient(key.account), readClient(), { commitment: c, dueMs: clock.replyDueMs, commission: countMe && ic ? ic : undefined });
+      if (countMe && ic) setTallyTick((n) => n + 1);
       const v = await read((cl) => loadRti(cl, c));
       const block = v.record?.createdAt ?? null;
       setReceipt({ v: 2, kind: "proof-of-life/rti-receipt", salt, sha256: fileHash, commitment: c, key: r.key.toLowerCase(), block: String(block ?? 0n), due_block: r.dueBlock.toString(), tx: r.txHash });
@@ -235,7 +251,7 @@ export default function Rti() {
         </Card>
       </div>
 
-      <Backlog />
+      <Backlog id={ic} pick={pickIc} tick={tallyTick} />
 
       <Card className="space-y-4">
         <h2 className="t-title">{t("rti_rec_t")}</h2>
@@ -263,6 +279,14 @@ export default function Rti() {
             <div className="flex flex-wrap items-center gap-3">
               <Button onClick={record} disabled={step !== "idle"}>{step === "gas" ? t("rti_rec_gas") : step === "write" ? t("rti_rec_write") : t("rti_rec_go")}</Button>
               <span className="text-[13.5px] text-muted">{t("rti_rec_none")}</span>
+              {ic ? (
+                <label className="flex w-full items-start gap-2 text-[14px]">
+                  <input type="checkbox" className="mt-1" checked={countMe} onChange={(e) => setCountMe(e.target.checked)} />
+                  <span>{t("rti_tally_opt", { name: COMMISSIONS.find((x) => x.id === ic)?.name ?? ic })}</span>
+                </label>
+              ) : (
+                <span className="w-full text-[13px] text-muted">{t("rti_tally_pick")}</span>
+              )}
             </div>
           )
         )}
@@ -306,21 +330,18 @@ export default function Rti() {
 }
 
 /** The Second Appeal's real-world wait, by commission, from the SNS report card. Nothing here is guessed. */
-function Backlog() {
+function Backlog({ id, pick, tick }: { id: string; pick: (v: string) => void; tick: number }) {
   const { t } = useI18n();
-  const [id, setId] = useState(() => {
-    try {
-      return localStorage.getItem("pol.rti.commission") ?? "";
-    } catch {
-      return "";
-    }
-  });
-  const pick = (v: string) => {
-    setId(v);
-    try {
-      localStorage.setItem("pol.rti.commission", v);
-    } catch {}
-  };
+  const [tally, setTally] = useState<RtiTally | null>(null);
+  useEffect(() => {
+    setTally(null);
+    if (!id) return;
+    let live = true;
+    read((c) => rtiTally(c, id)).then((x) => live && setTally(x)).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [id, tick]);
   const c = COMMISSIONS.find((x) => x.id === id);
   const wait = c?.wait ? (c.wait.m ? t("rti_bk_years_months", { y: c.wait.y, m: c.wait.m }) : t("rti_bk_years", { y: c.wait.y })) : null;
   return (
@@ -341,6 +362,12 @@ function Backlog() {
           {c.reduced && <li>{t("rti_bk_reduced")}</li>}
           {!wait && !c.defunct && !c.noChief && !c.reduced && <li className="text-muted">{t("rti_bk_none")}</li>}
         </ul>
+      )}
+      {c && tally && tally.commission === id && (
+        <div className="space-y-1 rounded-[14px] bg-paper-alt px-4 py-3 text-[14px] leading-relaxed">
+          <p>{tally.recorded ? t("rti_tally_line", { n: tally.recorded, late: tally.overdue }) : t("rti_tally_zero")}</p>
+          <p className="text-[13px] text-muted">{t("rti_tally_note")}</p>
+        </div>
       )}
       <p className="text-[14px] leading-relaxed text-ink-2">{t("rti_bk_all", { n: BACKLOG_PENDING })}</p>
       <p className="text-[13px] leading-snug text-muted">

@@ -8,6 +8,6 @@ describe("arkiv/contract.schema.json", () => {
     expect(onDisk).toEqual(JSON.parse(JSON.stringify(dataContract())));
   });
   it("covers every entity the app writes", () => {
-    expect(Object.keys(dataContract()["x-entities"]).sort()).toEqual(["ack", "beat", "chunk", "envelope", "heartbeat", "release", "rti", "vault"]);
+    expect(Object.keys(dataContract()["x-entities"]).sort()).toEqual(["ack", "beat", "chunk", "envelope", "heartbeat", "release", "rti", "rti_tally", "vault"]);
   });
 });

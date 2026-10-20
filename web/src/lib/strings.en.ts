@@ -184,6 +184,11 @@ export const en = {
   home_rti_s3: "estimated wait for a matter at the Telangana commission, filed on 1 July 2025.",
   home_rti_next: "For the few whose RTI work puts them in danger, the vault is the next layer.",
   hero_cta_rti: "Check your RTI deadline",
+  rti_tally_line: "Recorded with this clock for this commission: {n}, of which {late} are past their reply deadline. Counted live from Arkiv.",
+  rti_tally_zero: "No application for this commission has been added to the public count yet.",
+  rti_tally_note: "Filers choose to be counted when they record an application. Anyone can add to the count, so read it as a signal from filers, not an audit of the commission.",
+  rti_tally_opt: "Also add this application, anonymously, to the public count for {name}. Only the commission and the reply deadline go on Arkiv.",
+  rti_tally_pick: "To add this application to a commission's public count, choose your information commission above.",
   // Key, check-in, custodian and sealing flows
   nv_reused: "One of these invite codes already guards another vault. Reusing it would link your vaults on Arkiv. Ask that custodian for a fresh invite code.",
   kg_no_key_activist: "That passphrase opens no activist key in this browser.",
