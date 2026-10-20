@@ -34,6 +34,7 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 - **Cost to us:** the first design split ciphertext at the documented cap and failed on the first real upload; we also wanted a whole vault in one atomic batch, which this limit rules out above ~120 KiB.
 - **What would fix it:** (1) the SDK computes the JSON-RPC body size before sending and throws a size error naming the byte count and the 262,144-byte limit; (2) the docs give the usable payload ceiling (about 125 KiB with a few attributes) next to the 128 KiB figure, and say a batch shares one request; (3) the SDK passes through the RPC's own `request body too large` text.
 - **Our workaround:** 96 KiB chunks, one per transaction, each created and sealed atomically; the manifest batch is what makes a vault exist, so readers never see half a vault ([`vault.ts`](../packages/core/src/crypto/vault.ts) `CHUNK_BYTES`, [`writes.ts`](../packages/core/src/arkiv/writes.ts) `chunksPerTx`).
+- **Versions and status:** `@arkiv-network/sdk` 0.8.1, viem 2.57.7, Node 24.19.0. Still open: `npm run friction` on 20 October 2026 (07:27 UTC) got HTTP 200 at 262,144 bytes and HTTP 413 `request body too large` at 262,200 bytes.
 
 ### F2. An unfunded wallet gets the same message, while a plain transfer gets a clear one
 
@@ -42,6 +43,7 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 - **Actual:** a `createEntity` from a fresh wallet with 0 GLM fails with exactly the F1 text, `Transaction failed: Execution error without revert data`. A plain GLM transfer from a wallet that is short (`walletClient.sendTransaction`, viem 2.57.7) fails clearly: `InsufficientFundsError: The total cost (gas * gas fee + value) of executing this transaction exceeds the balance of the account.` So the information exists at the RPC; the entity-write path drops it.
 - **Repro:** `npx tsx scripts/probe.ts unfunded` prints `unfunded write: Transaction failed: Execution error without revert data`. For the contrast, any `sendTransaction` from an empty wallet (we hit it on 18 October funding test wallets from a drained publisher).
 - **What would fix it:** map an `insufficient funds` estimate failure to an `InsufficientGLM { address, balance }` error in the entity-write path, as viem already does for transfers.
+- **Versions and status:** `@arkiv-network/sdk` 0.8.1, viem 2.57.7, Node 24.19.0. Still open as of our last run, 18 October 2026. Needs a funded wallet to re-check: `npx tsx scripts/probe.ts unfunded`.
 
 ### F3. Lifetime is not priced, although the docs say it is
 
@@ -59,6 +61,7 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 - **Repro:** `npx tsx scripts/probe.ts lifetime`
 - **Why it matters:** we designed the vault term around paying for time (short lifetimes plus carry-forward on each check-in). On Tiramisu today, a 365-day lifetime costs the same as a 1-day one, so the "pay for what you keep" advice does not hold. Either the docs describe future pricing or testnet pricing differs; the docs should say which.
 - **What would fix it:** one line on the Tiramisu page saying whether lifetime is priced on this network.
+- **Versions and status:** `@arkiv-network/sdk` 0.8.1, viem 2.57.7, Node 24.19.0. Still open as of our last run, 17 October 2026 (block 692986). Needs a funded wallet to re-check: `npx tsx scripts/probe.ts lifetime`.
 
 ---
 
@@ -72,6 +75,7 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 - **Repro:** `npx tsx scripts/collisions.ts`.
 - **What we did:** every read filters by `project`, `vault_id` or `$creator`. Unlisted vaults now store only `vault_id` and a `type` hashed with the vault id ([`schema.ts`](../packages/core/src/arkiv/schema.ts) `kindTag`), with all numbers only in the manifest payload, so no query on `type`, `project` or a number lists them. A scan of every entity can still find them; [`schema.md`](schema.md) says what such a scan sees.
 - **What would help:** a line in the docs that attribute names and values share one global space, with a recommended namespacing pattern.
+- **Versions and status:** `@arkiv-network/sdk` 0.8.1, viem 2.57.7, Node 24.19.0. Still open: `npm run friction` on 20 October 2026 found 164 entities with `type = str('report')` from 6 different project tags at block 815737.
 
 ### F6. Expiry hides an entity from current queries but not from history, and the docs say it is gone
 
@@ -81,6 +85,7 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 - **Repro:** `npx tsx scripts/expired.ts` and `npx tsx scripts/retention.ts`.
 - **Why it matters:** "let it expire" is not "delete it". For products that rely on expiry for privacy, the data stays readable to anyone who asks for an old block. For us it is harmless only because everything we store is ciphertext or public by design; we now say so in the app and in [`schema.md`](schema.md).
 - **What would fix it:** a sentence in the expiry docs that expired entities remain readable at earlier blocks, and the actual retention window for Tiramisu.
+- **Versions and status:** `@arkiv-network/sdk` 0.8.1, viem 2.57.7, Node 24.19.0. Still open: `npm run friction` on 20 October 2026 read the expired heartbeat with `atBlock 692650` (1 row) while the head (block 815738) returned 0 rows.
 
 ## Paths we tested that worked
 
@@ -94,7 +99,9 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 ### W2. Non-permissionless extension is owner-only
 
 - **Expected:** a custodian cannot keep an activist's heartbeat alive.
-- **Actual:** `extendEntity` on the heartbeat from a custodian wallet is refused with an ownership error (`scripts/e2e.ts`, report field `strangerExtendHeartbeat`).
+- **Actual:** `extendEntity` on the heartbeat from another wallet is refused. The exact text from run 15: `Transaction failed: entity 0x465c12cb…f4e2f2 is owned by 0x30D492a47f9dBC4aBc75a8bBBd19611b3c33796C, not 0x758EF67a0C2a4A617c391d0b5c4C97Fc30416fDC` ([`scripts/e2e-report-15.json`](../scripts/e2e-report-15.json), field `strangerExtendHeartbeat`).
+- **Steps:** `npx tsx scripts/e2e.ts` seals a vault, then has a wallet that is not the activist call `extendEntity` on the heartbeat.
+- **Versions:** `@arkiv-network/sdk` 0.8.1, viem 2.57.7, Node 24.19.0.
 
 ### W3. `extendEntity` sets the expiry, it does not add to it
 
@@ -108,7 +115,10 @@ One root cause, the public RPC's request-body limit, shows up as two failures th
 
 ### W5. Ownership errors name both addresses
 
-- Wrong-owner writes fail with `entity 0x… is owned by 0x…, not 0x…`. This made the trust tests easy to write, and F2 asks for the same quality everywhere.
+- **Expected:** a write from the wrong owner fails with a message that says why.
+- **Actual:** it does. The activist deleting its own sealed manifest in run 15 got `Transaction failed: entity 0xd7f6719b…21bc34 is owned by 0x000000000000000000000000000000000000dEaD, not 0x30D492a47f9dBC4aBc75a8bBBd19611b3c33796C` ([`scripts/e2e-report-15.json`](../scripts/e2e-report-15.json), field `activistDeleteSealed`). This made the trust tests easy to write, and F2 asks for the same quality everywhere.
+- **Steps:** `npx tsx scripts/e2e.ts`, which tries the delete right after sealing.
+- **Versions:** `@arkiv-network/sdk` 0.8.1, viem 2.57.7, Node 24.19.0.
 
 ### W6. `NOT (type = …)` loads a whole vault except its ciphertext in one query
 
